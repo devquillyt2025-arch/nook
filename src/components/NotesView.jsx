@@ -1,11 +1,12 @@
 import { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
+import { NOTES_STORAGE_KEY, loadNotes, newNote, saveNote as storeSaveNote } from '../utils/notesStore';
 import Select from './Select';
 import ErrorBoundary from './ErrorBoundary';
 import { sameDay, startOfDay, endOfDay } from '../utils/date';
 
-const STORAGE_KEY = 'nook_notes';
+const STORAGE_KEY = NOTES_STORAGE_KEY;
 
 const NOTE_COLORS = [
   { id: 'default', label: 'Default', bg: 'var(--bg-input)',       border: 'var(--border)' },
@@ -46,20 +47,6 @@ function timeAgo(iso) {
   const d = Math.floor(h / 24);
   if (d < 7)  return `${d}d ago`;
   return new Date(iso).toLocaleDateString('en', { month: 'short', day: 'numeric' });
-}
-
-function newNote(overrides = {}) {
-  return {
-    id:        Date.now().toString(),
-    title:     '',
-    content:   '',
-    color:     'default',
-    pinned:    false,
-    tags:      [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    ...overrides,
-  };
 }
 
 // ── Content deduplication ────────────────────────────────────────────────
@@ -502,10 +489,7 @@ export function NoteCard({ note, onOpen, onPin, onDelete, onTagClick, onColorSel
 // ── Main NotesView ─────────────────────────────────────────────────────────
 export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '' }) {
   const [localSearchQuery, setLocalSearchQuery] = useState('');
-  const [notes,       setNotes]       = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-    catch { return []; }
-  });
+  const [notes,       setNotes]       = useState(loadNotes);
   const [sortOrder,   setSortOrder]   = useState('updated');
   const [activeTag,   setActiveTag]   = useState(null);
   const [activeColor, setActiveColor] = useState(null);
@@ -539,15 +523,19 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
   }, []);
 
   // ── CRUD ───────────────────────────────────────────────────────────
-  const saveNote = (note) => {
-    setNotes(prev => {
-      const exists = prev.find(n => n.id === note.id);
-      logActivity({ module: 'notes', entity_type: 'note', entity_id: note.id, action: exists ? 'updated' : 'created', title: note.title || '(untitled)' });
-      const updated = exists ? prev.map(n => n.id === note.id ? note : n) : [note, ...prev];
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
-      return updated;
-    });
-  };
+  // Delegates to utils/notesStore so a note can also be created from outside
+  // this component (voice commands, dispatched from App.jsx while this tab
+  // isn't even mounted) without duplicating the read-modify-write + activity
+  // logging. The listener below picks up writes that happen while this IS
+  // mounted but originated elsewhere (e.g. this same voice path, if the user
+  // is on the Notes tab when they use it).
+  const saveNote = (note) => setNotes(storeSaveNote(note));
+
+  useEffect(() => {
+    const onChange = () => setNotes(loadNotes());
+    window.addEventListener('nook-notes-changed', onChange);
+    return () => window.removeEventListener('nook-notes-changed', onChange);
+  }, []);
 
   const updateNoteColor = (id, newColor) => {
     setNotes(prev => {
