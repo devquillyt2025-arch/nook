@@ -42,6 +42,7 @@ import { localDateStr, todayStr } from './utils/date';
 import { genId } from './utils/id';
 import FocusCompanion from './components/FocusCompanion';
 import SidebarSearch, { useNookSearch, ResultsList } from './components/SidebarSearch';
+import VoiceCommandButton from './components/VoiceCommandButton';
 import nookLogo from './nook-favicon.png';
 
 // ── Code-split route-level views (each tab's chunk loads only when that tab is opened) ──
@@ -1490,8 +1491,13 @@ export default function App() {
           </button>
         </div>
 
-        {/* Search — full widget when expanded, icon-only trigger when railed */}
-        <SidebarSearch tasks={tasks} habits={habits} setActiveTab={setActiveTab} onQueryChange={setSearchQuery} />
+        {/* Search — full widget when expanded, icon-only trigger when railed —
+            plus the voice-command mic beside it, so both are reachable from
+            any tab the same way. */}
+        <div className="sb-search-row">
+          <SidebarSearch tasks={tasks} habits={habits} setActiveTab={setActiveTab} onQueryChange={setSearchQuery} />
+          <VoiceCommandButton tasks={tasks} addTask={addTask} toggleComplete={toggleComplete} showToast={showToast} />
+        </div>
 
         {/* ── Section: Main ── */}
         <span className="nav-section-label">Main</span>
