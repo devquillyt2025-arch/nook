@@ -59,6 +59,7 @@ const ActivityLogView = lazy(() => import('./components/ActivityLogView'));
 const VaultView       = lazy(() => import('./components/VaultView'));
 const LinksView       = lazy(() => import('./components/LinksView'));
 const RemindersView   = lazy(() => import('./components/RemindersView'));
+const ChatView        = lazy(() => import('./components/ChatView'));
 
 // ─── Constants ───────────────────────────────────────────────────
 const LONG_BREAK_AFTER = 4;
@@ -1531,6 +1532,7 @@ export default function App() {
           { id:'timer',      label:'Focus',        Icon: NavIcoTimerIcon },
           { id:'links',      label:'Links',        Icon: NavIcoLinks },
           { id:'countdowns', label:'Countdowns',   Icon: NavIcoHourglass },
+          { id:'chat',       label:'Chat',         Icon: NavIcoChat },
         ].map(tab => (
           <button key={tab.id}
             className={`main-nav-btn${activeTab===tab.id?' nav-active':''}`}
@@ -1744,6 +1746,7 @@ export default function App() {
           {activeTab === 'vault'    && <VaultView />}
           {activeTab === 'links'   && <LinksView />}
           {activeTab === 'reminders' && <RemindersView onNavigateToSource={navigateToReminderSource} tasks={tasks} />}
+          {activeTab === 'chat'      && <ChatView />}
           {activeTab === 'activity' && <ActivityLogView setActiveTab={setActiveTab} />}
 
           {activeTab === 'tasks' && (
@@ -2006,6 +2009,9 @@ function NavIcoBookOpen() {
 // Section 2 — Planning
 function NavIcoHourglass() {
   return <svg width="18" height="18" viewBox="0 0 24 24" {...S}><path d="M5 2h14"/><path d="M5 22h14"/><path d="M5 2c0 6 6 6 6 10s-6 4-6 10"/><path d="M19 2c0 6-6 6-6 10s6 4 6 10"/></svg>;
+}
+function NavIcoChat() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" {...S}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
 }
 function NavIcoBarChart() {
   return <svg width="18" height="18" viewBox="0 0 24 24" {...S}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>;
