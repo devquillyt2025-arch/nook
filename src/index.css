@@ -342,7 +342,6 @@ input, textarea, select { font-family: inherit; }
   width: var(--sidebar-rail-width) !important;
   min-width: var(--sidebar-rail-width) !important;
   padding: 16px 6px 14px;
-  overflow: visible !important; /* let tooltips escape */
 }
 
 /* In rail mode: hide everything that isn't an icon */

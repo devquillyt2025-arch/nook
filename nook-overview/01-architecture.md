@@ -4,7 +4,6 @@
 
 Nook is a **client-only SPA with no backend of its own.** Every feature's primary
 data lives in `localStorage`, is loaded synchronously into React state in
-`App.jsx`, and is written back by a `useEffect` on change. There is no server
 round-trip for normal reads/writes, and the app is fully functional with no
 network and no account.
 

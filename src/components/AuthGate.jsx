@@ -2,6 +2,12 @@ import { useState, useEffect } from 'react';
 import { supabase, isAuthConfigured } from '../utils/authClient';
 import AuthPage from './AuthPage';
 
+/* 
+ * NOTE: AuthGate and AuthPage are purposefully bypassed in main.jsx 
+ * for local-only use right now. We are keeping the code here because 
+ * we will use it in the future when we add cloud sync/accounts.
+ */
+
 // Gates the app behind email/password auth — but ONLY when Supabase env vars
 // are present. Without them, the app renders exactly as before (no login),
 // so adding this can't break the existing experience.

@@ -44,6 +44,7 @@ import FocusCompanion from './components/FocusCompanion';
 import SidebarSearch, { useNookSearch, ResultsList } from './components/SidebarSearch';
 import VoiceCommandButton from './components/VoiceCommandButton';
 import nookLogo from './nook-favicon.png';
+import AssistantChat from './components/AssistantChat';
 
 // ── Code-split route-level views (each tab's chunk loads only when that tab is opened) ──
 const ReportsView     = lazy(() => import('./components/ReportsView'));
@@ -349,6 +350,7 @@ export default function App() {
 
   // ── New state ──
   const [activeTab,      setActiveTab]      = useState(loadActiveTab);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   // Persist nav state so a reload lands where you left off. Write-through on
   // every switch, same shape as the sidebar-collapse pref below.
   useEffect(() => {
@@ -1480,16 +1482,27 @@ export default function App() {
       >
         {/* Brand row — logo + name + toggle button */}
         <div className="sidebar-brand">
-          <img src={nookLogo} className="sidebar-brand-logo" alt="Nook Logo" />
+          <img 
+            src={nookLogo} 
+            className="sidebar-brand-logo" 
+            alt="Nook Logo" 
+            onClick={() => {
+              if (!sidebarOpen) setSidebarOpen(true);
+            }}
+            style={{ cursor: !sidebarOpen ? 'pointer' : 'default' }}
+            title={!sidebarOpen ? 'Expand sidebar' : ''}
+          />
           <span className="sidebar-brand-name">Nook</span>
-          <button
-            className="hdr-btn sidebar-close-btn"
-            onClick={() => setSidebarOpen(v => !v)}
-            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-          </button>
+          {sidebarOpen && (
+            <button
+              className="hdr-btn sidebar-close-btn"
+              onClick={() => setSidebarOpen(false)}
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+          )}
         </div>
 
         {/* Search — full widget when expanded, icon-only trigger when railed —
@@ -1497,7 +1510,7 @@ export default function App() {
             any tab the same way. */}
         <div className="sb-search-row">
           <SidebarSearch tasks={tasks} habits={habits} setActiveTab={setActiveTab} onQueryChange={setSearchQuery} />
-          <VoiceCommandButton tasks={tasks} addTask={addTask} toggleComplete={toggleComplete} showToast={showToast} />
+          {/* <VoiceCommandButton tasks={tasks} addTask={addTask} toggleComplete={toggleComplete} showToast={showToast} /> */}
         </div>
 
         {/* ── Section: Main ── */}
@@ -1514,7 +1527,7 @@ export default function App() {
           <button key={tab.id}
             className={`main-nav-btn${activeTab===tab.id?' nav-active':''}`}
             onClick={() => setActiveTab(tab.id)}
-            data-tooltip={tab.label}
+            title={!sidebarOpen ? tab.label : undefined}
           >
             <span className="nav-icon-wrap">
               <span className="nav-icon"><tab.Icon /></span>
@@ -1532,12 +1545,18 @@ export default function App() {
           { id:'timer',      label:'Focus',        Icon: NavIcoTimerIcon },
           { id:'links',      label:'Links',        Icon: NavIcoLinks },
           { id:'countdowns', label:'Countdowns',   Icon: NavIcoHourglass },
-          { id:'chat',       label:'Chat',         Icon: NavIcoChat },
+          // { id:'chat',       label:'AI Assistant', Icon: NavIcoChat }, // Hidden for now per user request
         ].map(tab => (
           <button key={tab.id}
-            className={`main-nav-btn${activeTab===tab.id?' nav-active':''}`}
-            onClick={() => setActiveTab(tab.id)}
-            data-tooltip={tab.label}
+            className={`main-nav-btn${(activeTab===tab.id && tab.id !== 'chat') || (tab.id === 'chat' && isAssistantOpen) ? ' nav-active':''}`}
+            onClick={() => {
+              if (tab.id === 'chat') {
+                setIsAssistantOpen(!isAssistantOpen);
+              } else {
+                setActiveTab(tab.id);
+              }
+            }}
+            title={!sidebarOpen ? tab.label : undefined}
           >
             <span className="nav-icon-wrap">
               <span className="nav-icon"><tab.Icon /></span>
@@ -1557,7 +1576,7 @@ export default function App() {
           <button key={tab.id}
             className={`main-nav-btn${activeTab===tab.id?' nav-active':''}`}
             onClick={() => setActiveTab(tab.id)}
-            data-tooltip={tab.label}
+            title={!sidebarOpen ? tab.label : undefined}
           >
             <span className="nav-icon-wrap">
               <span className="nav-icon"><tab.Icon /></span>
@@ -1571,7 +1590,7 @@ export default function App() {
         <button
           className={`main-nav-btn${activeTab==='settings'?' nav-active':''}`}
           onClick={() => setActiveTab('settings')}
-          data-tooltip="Settings"
+          title={!sidebarOpen ? "Settings" : undefined}
         >
           <span className="nav-icon-wrap">
             <span className="nav-icon"><NavIcoSettings /></span>
@@ -1844,7 +1863,14 @@ export default function App() {
           <MobileMoreModal
             key="mobile-more"
             onClose={() => setOpenModal(null)}
-            onSelect={(id) => { setActiveTab(id); setOpenModal(null); }}
+            onSelect={(id) => { 
+              if (id === 'chat') {
+                setIsAssistantOpen(true);
+              } else {
+                setActiveTab(id); 
+              }
+              setOpenModal(null); 
+            }}
             tasks={tasks} habits={habits}
             onQueryChange={setSearchQuery}
           />
@@ -1876,6 +1902,7 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+      <AssistantChat isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />
     </div>
   );
 }
@@ -1901,6 +1928,7 @@ function MobileMoreModal(props) {
     { id: 'countdowns', label: 'Countdowns', Icon: NavIcoHourglass },
     { id: 'timer', label: 'Focus', Icon: NavIcoTimerIcon },
     { id: 'vault', label: 'Saved Logins', Icon: NavIcoVault },
+    // { id: 'chat', label: 'AI Assistant', Icon: NavIcoChat }, // Hidden for now per user request
     { id: 'reports', label: 'Reports', Icon: NavIcoBarChart },
     { id: 'activity', label: 'Activity Log', Icon: NavIcoHistory },
     { id: 'settings', label: 'Settings', Icon: NavIcoSettings },

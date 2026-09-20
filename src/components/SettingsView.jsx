@@ -122,6 +122,7 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
   const [form, setForm] = useState(settings);
   const [weekStart, setWeekStart] = useState(() => localStorage.getItem('nook-week-start') || 'monday');
   const [backupBusy, setBackupBusy] = useState(false);
+  const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem('nook_ai_api_key') || '');
 
   // Origin storage quota (Chrome/Edge/Firefox support the Storage API; Safari
   // and older browsers don't — quotaPct stays null there and the KB-only
@@ -258,6 +259,7 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
   useEffect(() => { try { localStorage.setItem('nook-notif-streak', notifStreak); } catch {} }, [notifStreak]);
   useEffect(() => { try { localStorage.setItem('nook-notif-pomo', notifPomo); } catch {} }, [notifPomo]);
   useEffect(() => { try { localStorage.setItem('nook-week-start', weekStart); } catch {} }, [weekStart]);
+  useEffect(() => { try { localStorage.setItem('nook_ai_api_key', aiApiKey); } catch {} }, [aiApiKey]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const applyPreset = preset => setForm(f => ({ ...f, ...preset.vals }));
@@ -716,6 +718,25 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
             </button>
           </div>
         )}
+      </section>
+
+      {/* AI Assistant Integration */}
+      <section className="settings-card">
+        <h3 className="settings-card-title">AI Assistant Integration</h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: 14 }}>
+          Connect your free Google Gemini API key to chat with your local data. Your data never leaves your browser except when sending questions to the AI.
+        </p>
+        <div className="form-grp">
+          <label className="set-field-lbl">Gemini API Key</label>
+          <input 
+            type="password" 
+            className="form-inp" 
+            style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: 10, boxSizing: 'border-box' }} 
+            value={aiApiKey} 
+            onChange={e => setAiApiKey(e.target.value)} 
+            placeholder="AIzaSy..." 
+          />
+        </div>
       </section>
 
       {/* App Preferences */}
