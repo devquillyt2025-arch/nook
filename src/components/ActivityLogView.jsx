@@ -1,5 +1,6 @@
 import { memo,  useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { loadActivityLog, clearActivityLog } from '../utils/activityLog';
+import { useSyncApplied } from '../utils/useSyncApplied';
 
 // ── Verb/dot colors per action ────────────────────────────────────
 function dotColor(action, status) {
@@ -27,7 +28,9 @@ const MODULE_META = {
   countdowns: { label: 'Countdowns', tab: 'countdowns' },
   journal:  { label: 'Journal', tab: 'journal'  },
   calendar: { label: 'Calendar',tab: 'calendar' },
-  vault:    { label: 'Saved Logins', tab: 'vault' },
+  // The Saved Logins tab was removed. Entries logged while it existed still read
+  // "Saved Logins", but there is nothing to navigate to and nothing left to filter by.
+  vault:    { label: 'Saved Logins', legacy: true },
   links:    { label: 'Links',       tab: 'links'  },
   trackers: { label: 'Trackers',    tab: 'reports' },
   intentions: { label: 'Intentions', tab: 'daily'  },
@@ -35,7 +38,7 @@ const MODULE_META = {
 };
 const MODULE_OPTIONS = [
   { value: 'all', label: 'All' },
-  ...Object.entries(MODULE_META).map(([k, v]) => ({ value: k, label: v.label })),
+  ...Object.entries(MODULE_META).filter(([, v]) => !v.legacy).map(([k, v]) => ({ value: k, label: v.label })),
 ];
 const STATUS_OPTIONS = [
   { value: 'all',     label: 'All'     },
@@ -131,6 +134,7 @@ export default memo(function ActivityLogView({ setActiveTab }) {
 
   const reload = useCallback(() => { setLog(loadActivityLog()); setPage(1); }, []);
   useEffect(() => { reload(); }, [reload]);
+  useSyncApplied(['activity_log'], () => setLog(loadActivityLog()));   // other devices' activity, merged into storage
 
   // Keep the view live: reload whenever the log is written to.
   // - Same tab: App.jsx fires 'nook-activity-updated' after each logActivity call.
