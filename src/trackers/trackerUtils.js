@@ -1,19 +1,33 @@
 // ─── Storage ──────────────────────────────────────────────────────
 const SK = 'nook-trackers';
 
+// Drops duplicate ids, then duplicate NAMES (case-insensitive). Which duplicate
+// survives matters now that trackers sync across devices: the app re-saves this
+// de-duplicated list, and cross-device sync reads every dropped tracker as "the user
+// deleted it". If each device kept a different copy, each would delete the OTHER's
+// and the tracker (with all its logs) would vanish everywhere. So the survivor is a
+// pure function of the data — the oldest (createdAt, then id) — identical on every
+// device; the survivor is kept in place and the rest are dropped.
+export function dedupeTrackers(list) {
+  const seenId = new Set();
+  const byId = list.filter(t => {
+    if (seenId.has(t.id)) return false;
+    seenId.add(t.id);
+    return true;
+  });
+  const rank = (t) => `${t.createdAt || ''}\u0000${t.id}`;
+  const winner = new Map();                    // name key -> tracker that survives
+  for (const t of byId) {
+    const key = (t.name || '').trim().toLowerCase();
+    const cur = winner.get(key);
+    if (!cur || rank(t) < rank(cur)) winner.set(key, t);
+  }
+  return byId.filter(t => winner.get((t.name || '').trim().toLowerCase()) === t);
+}
+
 export function loadTrackers() {
   try {
-    const list = JSON.parse(localStorage.getItem(SK) || '[]');
-    const seenId = new Set();
-    const seenName = new Set();
-    return list.filter(t => {
-      if (seenId.has(t.id)) return false;
-      seenId.add(t.id);
-      const nameKey = (t.name || '').trim().toLowerCase();
-      if (seenName.has(nameKey)) return false;
-      seenName.add(nameKey);
-      return true;
-    });
+    return dedupeTrackers(JSON.parse(localStorage.getItem(SK) || '[]'));
   } catch { return []; }
 }
 // Same retention pattern as utils/activityLog.js's MAX_ENTRIES: a tracker
