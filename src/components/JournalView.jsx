@@ -4,6 +4,12 @@ import { motion } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
 import { localDateStr } from '../utils/date';
 import { exportJournalDocx } from '../utils/journalDocx';
+import {
+  loadAllEntries as loadAllEntriesCloud,
+  saveEntry as saveEntryCloud,
+  loadIcons as loadIconsCloud,
+  saveIcons as saveIconsCloud,
+} from '../utils/journalStore';
 
 // ─── Shared SVG props ───────────────────────────────────────────────
 const S = { fill:'none', stroke:'currentColor', strokeWidth:'2', strokeLinecap:'round', strokeLinejoin:'round' };
@@ -32,7 +38,10 @@ function loadEntry(date) {
 }
 
 function persistEntry(date, entry) {
-  try { localStorage.setItem(jKey(date), JSON.stringify({ ...entry, updatedAt: new Date().toISOString() })); } catch {}
+  const updated = { ...entry, updatedAt: new Date().toISOString() };
+  try { localStorage.setItem(jKey(date), JSON.stringify(updated)); } catch {}
+  // Async cloud sync — fire-and-forget; never blocks the autosave callback
+  saveEntryCloud(date, updated).catch(() => {});
 }
 
 function loadAllEntries() {
@@ -50,6 +59,7 @@ function loadIcons() {
 }
 function persistIcons(map) {
   try { localStorage.setItem(ICONS_KEY, JSON.stringify(map)); } catch {}
+  saveIconsCloud(map).catch(() => {});
 }
 
 // ─── Content helpers ────────────────────────────────────────────────
@@ -261,6 +271,12 @@ export default memo(function JournalView() {
   const [viewingDate, setViewingDate] = useState(todayDate);
   const [history,     setHistory]     = useState(loadAllEntries);
   const [iconMap,     setIconMap]     = useState(loadIcons);
+
+  // Cloud hydration on mount — populates history and icons from Neon
+  useEffect(() => {
+    loadAllEntriesCloud().then(entries => { if (entries.length) setHistory(entries); });
+    loadIconsCloud().then(icons => { if (icons && Object.keys(icons).length) setIconMap(icons); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [currentWc,   setCurrentWc]   = useState(0);
   const [saveStatus,  setSaveStatus]  = useState('idle'); // 'idle' | 'saving' | 'saved'
 

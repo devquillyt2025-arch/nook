@@ -3,6 +3,17 @@
 
 const HABITS_KEY    = 'nook_habits';
 const MIGRATED_FLAG = 'nook_habits_migrated';
+const CLOUD_KEY     = 'habits';
+
+// ─── Cloud import (loaded lazily to avoid circular deps) ───────────
+let _cloudGet, _cloudSet;
+async function getCloud() {
+  if (!_cloudGet) {
+    const m = await import('./utils/api.js');
+    _cloudGet = m.cloudGet; _cloudSet = m.cloudSet;
+  }
+  return { get: _cloudGet, set: _cloudSet };
+}
 
 // ─── Category / color meta ─────────────────────────────────────────
 export const HABIT_CATS = {
@@ -28,6 +39,23 @@ export function loadHabits() {
     const raw = localStorage.getItem(HABITS_KEY);
     return raw ? JSON.parse(raw) : null;          // null = not yet initialised
   } catch { return []; }
+}
+
+export async function loadHabitsCloud() {
+  try {
+    const { get } = await getCloud();
+    const cloud = await get(CLOUD_KEY);
+    if (cloud != null) return cloud;
+  } catch {}
+  return loadHabits();
+}
+
+export async function saveHabitsCloud(list) {
+  try {
+    const { set } = await getCloud();
+    await set(CLOUD_KEY, list);
+  } catch {}
+  saveHabits(list); // keep local in sync
 }
 
 export function saveHabits(list) {

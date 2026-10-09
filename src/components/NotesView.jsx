@@ -1,7 +1,7 @@
 import { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
-import { NOTES_STORAGE_KEY, loadNotes, newNote, saveNote as storeSaveNote } from '../utils/notesStore';
+import { NOTES_STORAGE_KEY, loadNotes, saveNotesList, newNote, saveNote as storeSaveNote } from '../utils/notesStore';
 import Select from './Select';
 import ErrorBoundary from './ErrorBoundary';
 import { sameDay, startOfDay, endOfDay } from '../utils/date';
@@ -489,8 +489,14 @@ export function NoteCard({ note, onOpen, onPin, onDelete, onTagClick, onColorSel
 // ── Main NotesView ─────────────────────────────────────────────────────────
 export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '' }) {
   const [localSearchQuery, setLocalSearchQuery] = useState('');
-  const [notes,       setNotes]       = useState(loadNotes);
+  const [notes,       setNotes]       = useState([]);
+  const [notesLoading, setNotesLoading] = useState(true);
   const [sortOrder,   setSortOrder]   = useState('updated');
+
+  // Cloud load on mount
+  useEffect(() => {
+    loadNotes().then(data => { setNotes(data); setNotesLoading(false); });
+  }, []);
   const [activeTag,   setActiveTag]   = useState(null);
   const [activeColor, setActiveColor] = useState(null);
   const [viewMode,    setViewMode]    = useState('grid'); // 'grid' | 'list'
@@ -505,7 +511,7 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
 
   const persist = (updated) => {
     setNotes(updated);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+    saveNotesList(updated); // async, fire-and-forget
   };
 
   // Bug 3 fix: one-time migration that removes content duplicated at the data
@@ -529,10 +535,10 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
   // logging. The listener below picks up writes that happen while this IS
   // mounted but originated elsewhere (e.g. this same voice path, if the user
   // is on the Notes tab when they use it).
-  const saveNote = (note) => setNotes(storeSaveNote(note));
+  const saveNote = (note) => { storeSaveNote(note).then(updated => { if (updated) setNotes(updated); }); };
 
   useEffect(() => {
-    const onChange = () => setNotes(loadNotes());
+    const onChange = () => loadNotes().then(setNotes);
     window.addEventListener('nook-notes-changed', onChange);
     return () => window.removeEventListener('nook-notes-changed', onChange);
   }, []);
@@ -540,7 +546,7 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
   const updateNoteColor = (id, newColor) => {
     setNotes(prev => {
       const updated = prev.map(n => n.id === id ? { ...n, color: newColor, updatedAt: new Date().toISOString() } : n);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      saveNotesList(updated);
       return updated;
     });
   };
@@ -551,7 +557,7 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
       const note = prev.find(n => n.id === id);
       if (note) logActivity({ module: 'notes', entity_type: 'note', entity_id: id, action: 'deleted', title: note.title || '(untitled)' });
       const updated = prev.filter(n => n.id !== id);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      saveNotesList(updated);
       return updated;
     });
   };
@@ -563,7 +569,7 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
       const target = prev.find(n => n.id === id);
       if (target) logActivity({ module: 'notes', entity_type: 'note', entity_id: id, action: 'updated', title: `${target.pinned ? 'Unpinned' : 'Pinned'}: ${target.title || '(untitled)'}` });
       const updated = prev.map(n => n.id === id ? { ...n, pinned: !n.pinned, updatedAt: new Date().toISOString() } : n);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      saveNotesList(updated);
       return updated;
     });
   };
