@@ -1,9 +1,12 @@
-import { memo, useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { memo, useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
+import DateInput from './DateInput';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
 import { localDateStr } from '../utils/date';
 import { exportJournalDocx } from '../utils/journalDocx';
+import { useSyncApplied } from '../utils/useSyncApplied';
+import { ackSync } from '../utils/sync';
 
 // ─── Shared SVG props ───────────────────────────────────────────────
 const S = { fill:'none', stroke:'currentColor', strokeWidth:'2', strokeLinecap:'round', strokeLinejoin:'round' };
@@ -285,6 +288,9 @@ export default memo(function JournalView() {
   const autoSaveTimerRef = useRef(null);
   const exportMsgTimerRef = useRef(null);
   const exportMenuRef    = useRef(null);
+  const exportTriggerRef = useRef(null);   // the Export button — the menu is positioned from it
+  const exportPopRef     = useRef(null);   // the menu itself (portaled to <body>)
+  const [exportPos, setExportPos] = useState(null);   // { top, left } in viewport px; null until measured
   const viewingDateRef   = useRef(viewingDate);
 
   const isToday = viewingDate === todayDate;
@@ -339,6 +345,38 @@ export default memo(function JournalView() {
     setSaveStatus('idle');
   }, [viewingDate]);
 
+  // Put the stored copy of the open day into the editor (used for a remote edit).
+  const showStoredEntryInEditor = useCallback(() => {
+    const el = editorRef.current;
+    const e = el && loadEntry(viewingDateRef.current);
+    if (!e) return;
+    const html = toHtml(e.content ?? '');
+    if (el.innerHTML !== html) {
+      el.innerHTML = html;
+      el.dataset.empty = !htmlToText(html).trim() ? 'true' : '';
+      setCurrentWc(wordCountFromHtml(html));
+    }
+  }, []);
+  const remotePendingRef = useRef(false);
+
+  // Another device wrote journal entries / mood icons: refresh the calendar and
+  // history. The day OPEN in the editor is only replaced when the user isn't in it
+  // (editor not focused, no unsaved keystrokes) — a remote edit must never eat text
+  // that is being written. If we have to hold it back, it is shown when the user
+  // leaves the editor, and until then we return false so the sync engine knows this
+  // view has NOT seen it yet and keeps guarding the entry.
+  useSyncApplied(['journal', 'journal_icons'], (names) => {
+    if (names.includes('journal_icons')) setIconMap(loadIcons());
+    if (!names.includes('journal')) return;
+    setHistory(loadAllEntries());
+    const el = editorRef.current;
+    if (el && (document.activeElement === el || saveStatus === 'saving')) {
+      remotePendingRef.current = true;
+      return false;
+    }
+    showStoredEntryInEditor();
+  });
+
   // ── Save helpers ──
   const flagSaved = useCallback(() => {
     setSaveStatus('saved');
@@ -378,7 +416,13 @@ export default memo(function JournalView() {
     if (!editorRef.current) return;
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     if (saveStatus === 'saving') saveCurrentEntry(editorRef.current.innerHTML);
-  }, [saveCurrentEntry, saveStatus]);
+    // A remote edit of this day arrived while the user was in the editor. If they typed,
+    // their save above just superseded it (last write wins); if not, show it now.
+    if (remotePendingRef.current) {
+      remotePendingRef.current = false;
+      if (saveStatus !== 'saving') { showStoredEntryInEditor(); ackSync(['journal']); }
+    }
+  }, [saveCurrentEntry, saveStatus, showStoredEntryInEditor]);
 
   useEffect(() => () => {
     clearTimeout(autoSaveTimerRef.current);
@@ -466,10 +510,41 @@ export default memo(function JournalView() {
     return () => window.removeEventListener('keydown', h);
   }, []);
 
+  // Place the (portaled) export menu under the Export button, right-aligned to it, kept
+  // inside the viewport; if there is no room below it opens above instead. Re-runs when the
+  // menu changes height (custom range / status message) and on resize/scroll — the side
+  // panel scrolls, so listen in the capture phase to hear it.
+  const placeExportMenu = useCallback(() => {
+    const trig = exportTriggerRef.current;
+    if (!trig) return;
+    const r = trig.getBoundingClientRect();
+    const pop = exportPopRef.current;
+    const W = pop?.offsetWidth || 240, H = pop?.offsetHeight || 0, M = 8;
+    const left = Math.min(Math.max(M, r.right - W), Math.max(M, window.innerWidth - W - M));
+    let top = r.bottom + 8;
+    if (H && top + H > window.innerHeight - M) top = Math.max(M, r.top - 8 - H);
+    setExportPos(p => (p && p.left === left && p.top === top ? p : { left, top }));
+  }, []);
+  useLayoutEffect(() => {
+    if (!exportMenuOpen) { setExportPos(null); return undefined; }
+    placeExportMenu();   // layout effect: measured and placed before the browser paints, so no flash at 0,0
+    window.addEventListener('resize', placeExportMenu);
+    window.addEventListener('scroll', placeExportMenu, true);
+    return () => {
+      window.removeEventListener('resize', placeExportMenu);
+      window.removeEventListener('scroll', placeExportMenu, true);
+    };
+  }, [exportMenuOpen, rangeOpen, exportMsg, placeExportMenu]);
+
   // Close export dropdown on outside click
   useEffect(() => {
     if (!exportMenuOpen) return;
-    const handler = (e) => { if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) { setExportMenuOpen(false); setRangeOpen(false); } };
+    const handler = (e) => {
+      const inside = (exportMenuRef.current && exportMenuRef.current.contains(e.target))
+                  || (exportPopRef.current && exportPopRef.current.contains(e.target))   // the menu is portaled, so check it separately
+                  || !!(e.target.closest && e.target.closest('[data-nk-popover]'));        // so is the date popup opened from it
+      if (!inside) { setExportMenuOpen(false); setRangeOpen(false); }
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [exportMenuOpen]);
@@ -604,6 +679,7 @@ export default memo(function JournalView() {
                 >Today</button>
             <div className="jnx-export-dropdown" ref={exportMenuRef}>
               <button
+                ref={exportTriggerRef}
                 className="jnx-export-trigger"
                 onClick={() => setExportMenuOpen(o => !o)}
                 disabled={!!exporting}
@@ -616,8 +692,16 @@ export default memo(function JournalView() {
                 <JIcoChevronDown />
               </button>
 
-              {exportMenuOpen && (
-                <div className="jnx-export-menu" role="menu">
+              {/* Rendered into <body>, not inside the side panel: that panel scrolls (overflow:auto) and is
+                  its own stacking context, so a menu inside it was clipped at the panel's edge and could
+                  sit under the editor. Positioned from the Export button (see placeExportMenu). */}
+              {exportMenuOpen && createPortal(
+                <div
+                  className="jnx-export-menu"
+                  role="menu"
+                  ref={exportPopRef}
+                  style={exportPos ? { top: exportPos.top, left: exportPos.left } : { top: 0, left: 0, visibility: 'hidden' }}
+                >
                   <div className="jnx-export-menu-label">Download .docx · from {fmtDate(viewingDate)}</div>
 
                   {EXPORT_SCOPES.map(s => {
@@ -654,11 +738,11 @@ export default memo(function JournalView() {
                     <div className="jnx-export-range">
                       <label className="jnx-export-field">
                         <span>From</span>
-                        <input type="date" value={rangeFrom} max={rangeTo} onChange={e => setRangeFrom(e.target.value)} />
+                        <DateInput value={rangeFrom} max={rangeTo} onChange={e => setRangeFrom(e.target.value)} />
                       </label>
                       <label className="jnx-export-field">
                         <span>To</span>
-                        <input type="date" value={rangeTo} min={rangeFrom} onChange={e => setRangeTo(e.target.value)} />
+                        <DateInput value={rangeTo} min={rangeFrom} onChange={e => setRangeTo(e.target.value)} />
                       </label>
                       <button
                         className="jnx-export-go"
@@ -671,8 +755,7 @@ export default memo(function JournalView() {
                   )}
 
                   {exportMsg && <div className="jnx-export-msg" role="status" aria-live="polite">{exportMsg}</div>}
-                </div>
-              )}
+                </div>, document.body)}
             </div>
                 <span className={`jnx-status jnx-status-${saveStatus}`}>
                   {saveStatus === 'saving' && <><span className="jnx-status-dot" /> Saving…</>}
