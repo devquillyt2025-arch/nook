@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import DateInput from './DateInput';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -179,9 +180,9 @@ export default function AnalyticsDashboard({ habits = [], tasks = [], pomodoroLo
             </div>
             {rangeMode === 'custom' && (
               <div className="ra-custom">
-                <input type="date" value={customStart} max={customEnd || undefined} onChange={e => setCustomStart(e.target.value)} aria-label="Start date" />
+                <DateInput value={customStart} max={customEnd || undefined} onChange={e => setCustomStart(e.target.value)} aria-label="Start date" />
                 <span>→</span>
-                <input type="date" value={customEnd} min={customStart || undefined} onChange={e => setCustomEnd(e.target.value)} aria-label="End date" />
+                <DateInput value={customEnd} min={customStart || undefined} onChange={e => setCustomEnd(e.target.value)} aria-label="End date" />
               </div>
             )}
             <div className="header-actions no-print" style={{ display: 'flex', gap: 8 }}>
