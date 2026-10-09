@@ -572,7 +572,7 @@ function CompletionAnalytics({ pending, completed, onAdd, renderTask, onClearCom
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 }}>
           {completed.length > 0 && (
             <div style={{ display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button onClick={onClearCompleted} style={{ background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--color-red)', padding: '4px 12px', borderRadius: 7, fontSize: '0.73rem', fontWeight: 600, cursor: 'pointer' }}>Clear all</button>
+              <button onClick={() => { if (confirm(`Delete all ${completed.length} completed task${completed.length > 1 ? 's' : ''}?`)) onClearCompleted(); }} style={{ background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--color-red)', padding: '4px 12px', borderRadius: 7, fontSize: '0.73rem', fontWeight: 600, cursor: 'pointer' }}>Clear all</button>
             </div>
           )}
           <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
@@ -1714,7 +1714,7 @@ function TaskList({ tasks, activeTaskId, timerRunning, onSelect, onToggle, onDel
               <button
                 type="button"
                 className="tdp-delete-btn"
-                onClick={() => { onDelete(local.id); setDetailTask(null); setLocal(null); }}
+                onClick={() => { if (confirm(`Delete "${local.name}"?`)) { onDelete(local.id); setDetailTask(null); setLocal(null); } }}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="3 6 5 6 21 6"/>
