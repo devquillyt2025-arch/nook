@@ -59,7 +59,6 @@ const HabitsView      = lazy(() => import('./components/HabitsView'));
 const NotesView       = lazy(() => import('./components/NotesView'));
 const NoteModal       = lazy(() => import('./components/NotesView').then(m => ({ default: m.NoteModal })));
 const ActivityLogView = lazy(() => import('./components/ActivityLogView'));
-const VaultView       = lazy(() => import('./components/VaultView'));
 const LinksView       = lazy(() => import('./components/LinksView'));
 const RemindersView   = lazy(() => import('./components/RemindersView'));
 const ChatView        = lazy(() => import('./components/ChatView'));
@@ -116,12 +115,12 @@ function persist(key, value) { try { localStorage.setItem(key, JSON.stringify(va
 // and survive a "clear everything". Matches the `nook-sidebar-open` precedent.
 const ACTIVE_TAB_KEY = 'nook-active-tab';
 
-// The 14 real tab ids. Anything else — a renamed/removed tab, a hand-edited
+// The 13 real tab ids. Anything else — a renamed/removed tab, a hand-edited
 // value, the dead 'goals' id DailyGoalsView still links to — falls back to
 // 'daily' rather than rendering a blank content area.
 const TAB_IDS = new Set([
   'daily', 'tasks', 'calendar', 'habits', 'journal', 'reminders', 'notes',
-  'timer', 'links', 'countdowns', 'reports', 'activity', 'vault', 'settings',
+  'timer', 'links', 'countdowns', 'reports', 'activity', 'settings',
 ]);
 
 // Read synchronously as a useState initializer — NOT in a mount effect, which
@@ -457,10 +456,10 @@ export default function App() {
       await runRestore('task',  Array.isArray(localMap['nook-tasks'])  ? localMap['nook-tasks']  : [], restoreTasks);
       await runRestore('habit', Array.isArray(localMap['nook_habits']) ? localMap['nook_habits'] : [], restoreHabits);
     }
+
     // Everything the import wrote must be diffed and pushed BEFORE the reload
     // below — a reload abandons in-flight requests (same reason as the restores).
     await settleSync();
-
 
     // Copy is deliberately specific, because the two behaviours genuinely
     // differ and the previous single sentence ("a restore brings back
@@ -865,11 +864,11 @@ export default function App() {
   // user-facing data keys should prompt a reload.
   useEffect(() => {
     const onStorage = (e) => {
+      if (!e.key || !/^nook[-_]/.test(e.key) || CROSS_TAB_IGNORE_KEYS.has(e.key)) return;
       // Another tab's sync engine merged a remote change into this shared
       // localStorage. That's not a competing edit, and sync.js already told this
       // tab's views to refresh — a "reload" prompt would be wrong and noisy.
       if (isForeignSyncApply()) return;
-      if (!e.key || !/^nook[-_]/.test(e.key) || CROSS_TAB_IGNORE_KEYS.has(e.key)) return;
       setCrossTabChanged(true);
     };
     window.addEventListener('storage', onStorage);
@@ -1479,6 +1478,7 @@ export default function App() {
     return `${name.toLowerCase().replace(/\s+/g, '')}@gmail.com`;
   });
   const [profileAvatar, setProfileAvatar] = useState(() => localStorage.getItem('nook-profile-avatar') || '😎');
+
   // ── Cross-device sync (everything except tasks/habits/reminders) ──
   // utils/sync.js watches localStorage writes and mirrors them to Supabase
   // (synced_items), and merges other devices' changes back INTO localStorage.
@@ -1501,7 +1501,6 @@ export default function App() {
       if (names.includes('profile_avatar')) setProfileAvatar(localStorage.getItem('nook-profile-avatar') || '😎');
     },
   );
-
 
   // Nav badge counts (derived — no effect needed, no notification side-effect).
   // Previously this block contained a per-edit "Daily Summary" notification that
@@ -1613,7 +1612,6 @@ export default function App() {
         {[
           { id:'reports',  label:'Reports',       Icon: NavIcoBarChart },
           { id:'activity', label:'Activity Log',  Icon: NavIcoHistory },
-          { id:'vault',    label:'Saved Logins',  Icon: NavIcoVault },
         ].map(tab => (
           <button key={tab.id}
             className={`main-nav-btn${activeTab===tab.id?' nav-active':''}`}
@@ -1804,7 +1802,6 @@ export default function App() {
           {activeTab === 'journal'  && <JournalView sidebarOpen={sidebarOpen} />}
           {activeTab === 'countdowns' && <CountdownsView />}
           {activeTab === 'notes'    && <NotesView onOpenNoteEditor={setNoteEditorCtx} globalSearchQuery={searchQuery} />}
-          {activeTab === 'vault'    && <VaultView />}
           {activeTab === 'links'   && <LinksView />}
           {activeTab === 'reminders' && <RemindersView onNavigateToSource={navigateToReminderSource} tasks={tasks} />}
           {activeTab === 'chat'      && <ChatView />}
@@ -1969,7 +1966,6 @@ function MobileMoreModal(props) {
     { id: 'links', label: 'Links', Icon: NavIcoLinks },
     { id: 'countdowns', label: 'Countdowns', Icon: NavIcoHourglass },
     { id: 'timer', label: 'Focus', Icon: NavIcoTimerIcon },
-    { id: 'vault', label: 'Saved Logins', Icon: NavIcoVault },
     // { id: 'chat', label: 'AI Assistant', Icon: NavIcoChat }, // Hidden for now per user request
     { id: 'reports', label: 'Reports', Icon: NavIcoBarChart },
     { id: 'activity', label: 'Activity Log', Icon: NavIcoHistory },
@@ -2094,9 +2090,6 @@ function NavIcoNotes() {
 }
 function NavIcoHistory() {
   return <svg width="18" height="18" viewBox="0 0 24 24" {...S}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
-}
-function NavIcoVault() {
-  return <svg width="18" height="18" viewBox="0 0 24 24" {...S}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
 }
 function NavIcoLinks() {
   return <svg width="18" height="18" viewBox="0 0 24 24" {...S}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>;
