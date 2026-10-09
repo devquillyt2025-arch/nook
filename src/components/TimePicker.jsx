@@ -131,7 +131,7 @@ function WheelColumn({ items, value, onChange, format = v => v, loop = false }) 
 
 // Scroll-wheel time picker popup — companion to CalendarDatePicker for the
 // reminder "at a specific time" field.
-export default function TimePicker({ value, onChange, onClose }) {
+export default function TimePicker({ value, onChange, onClose, allowClear = false }) {
   const initial = parse24(value);
   const [hour12, setHour12]   = useState(initial.hour12);
   const [minute, setMinute]   = useState(initial.minute);
@@ -173,16 +173,24 @@ export default function TimePicker({ value, onChange, onClose }) {
       </div>
 
       <div style={{ borderTop: '1px solid var(--border)', padding: '8px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={setNow}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 600, padding: '4px 0' }}>
-          Now
-        </button>
         <div style={{ display: 'flex', gap: 14 }}>
-          <button onClick={onClose}
+          <button type="button" onClick={setNow}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 600, padding: '4px 0' }}>
+            Now
+          </button>
+          {allowClear && (
+            <button type="button" onClick={() => { onChange(''); onClose(); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-red)', fontSize: '0.78rem', fontWeight: 600, padding: '4px 0' }}>
+              Clear
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 14 }}>
+          <button type="button" onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 600, padding: '4px 0' }}>
             Cancel
           </button>
-          <button onClick={confirm}
+          <button type="button" onClick={confirm}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 700, padding: '4px 0' }}>
             Set
           </button>

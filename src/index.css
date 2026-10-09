@@ -1781,6 +1781,24 @@ input, textarea, select { font-family: inherit; }
 .form-error { font-size: 11px; color: var(--color-red); margin-top: 2px; }
 .form-textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
 
+/* ── Themed date / time pickers' trigger buttons (DateInput, TimeInput) ──
+   The browser's own date/time popups ignore the app theme, so those inputs are
+   buttons that open CalendarDatePicker / TimePicker. :where() gives the base look
+   ZERO specificity: form-inp, cdp-date-display, inline styles etc. all override it. */
+:where(.nk-pick) {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; box-sizing: border-box; text-align: left; cursor: pointer;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 11px; color: var(--text-primary); font-family: inherit; font-size: 0.855rem;
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+.nk-pick:hover:not(:disabled), .nk-pick[aria-expanded="true"] { border-color: var(--accent); }
+.nk-pick:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow2); }
+.nk-pick:disabled { opacity: 0.5; cursor: not-allowed; }
+.nk-pick-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nk-pick-ph { color: var(--text-muted); }
+.nk-pick-ico { flex-shrink: 0; color: var(--text-muted); }
+
 .cat-picker { display: flex; flex-wrap: wrap; gap: 5px; }
 .cat-pick-btn {
   padding: 4px 12px; border-radius: var(--radius-full);
@@ -2576,6 +2594,7 @@ kbd {
 .ra-seg button:hover { color: var(--text-primary); }
 .ra-seg .ra-seg-on { background: var(--accent); color: #fff; }
 .ra-custom { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 0.8rem; }
+.ra-custom .nk-pick { padding: 5px 8px; border-radius: 7px; background: var(--bg-card); border: 1px solid var(--border-strong); font-size: 0.78rem; gap: 6px; }
 .ra-custom input {
   padding: 5px 8px; border-radius: 7px; background: var(--bg-card);
   border: 1px solid var(--border-strong); color: var(--text-primary); font-family: inherit; font-size: 0.78rem;
@@ -3550,7 +3569,8 @@ select.modal-input {
    "special" themed page instead of matching Today/Tasks/Notes' purple. The
    --jnx-ink warm off-white/charcoal tokens stay as-is — that's body-text tone,
    not an accent color, and was never part of the amber-vs-purple mismatch. */
-.jnx-page {
+.jnx-page,
+.jnx-export-menu {   /* the export menu is portaled out of .jnx-page, so it carries the same tokens */
   --jnx-serif: 'Newsreader', 'Iowan Old Style', 'Georgia', serif;
   /* Dark is the app default — warm off-white ink on the app's own near-black */
   --jnx-ink:        #ece4d6;   /* warm off-white — primary ink */
@@ -3576,7 +3596,8 @@ select.modal-input {
    switches to --accent-dark (also an existing app token, not a new purple) —
    base --accent reads ~3.5:1 on white, under AA for the small uppercase
    eyebrow text; --accent-dark is the same hue, just deep enough for AA. */
-:root[data-theme="light"] .jnx-page {
+:root[data-theme="light"] .jnx-page,
+:root[data-theme="light"] .jnx-export-menu {
   --jnx-ink:        #2b2520;   /* warm dark charcoal ink — ~13:1 on paper */
   --jnx-ink-soft:   #6b6154;   /* ~5.5:1 */
   --jnx-ink-faint:  #a99f8d;
@@ -4104,7 +4125,9 @@ select.modal-input {
 .jnx-export-trigger[aria-expanded="true"] svg:last-child { transform: rotate(180deg); }
 
 .jnx-export-menu {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+  /* Portaled to <body> and placed by JournalView (top/left set inline from the Export button). */
+  position: fixed; z-index: 1000;
+  max-height: calc(100vh - 16px); overflow-y: auto;
   display: flex; flex-direction: column; gap: 2px;
   width: 240px; padding: 8px;
   background: var(--jnx-surface, var(--bg-elevated)); border: 1px solid var(--jnx-line);
@@ -4133,6 +4156,11 @@ select.modal-input {
   font-family: inherit; font-size: 0.76rem; color: var(--jnx-ink);
   background: var(--bg-base); border: 1px solid var(--jnx-line);
 }
+.jnx-export-field .nk-pick { flex: 1 1 auto; min-width: 0; max-width: 150px; padding: 6px 9px; border-radius: 8px; font-size: 0.76rem; color: var(--jnx-ink); background: var(--bg-base); border: 1px solid var(--jnx-line); }
+.jnx-export-field .nk-pick-text { text-transform: none; letter-spacing: normal; font-size: inherit; font-weight: 500; color: var(--jnx-ink); }
+.jnx-export-field .nk-pick-text.nk-pick-ph { color: var(--jnx-ink-faint); }
+.jnx-export-field .nk-pick:focus-visible, .jnx-export-field .nk-pick[aria-expanded="true"] { outline: none; border-color: color-mix(in srgb, var(--jnx-accent) 60%, transparent); box-shadow: none; }
+.jnx-export-field > div { flex: 1 1 auto; min-width: 0; max-width: 150px; }
 .jnx-export-field input:focus { outline: none; border-color: color-mix(in srgb, var(--jnx-accent) 60%, transparent); }
 .jnx-export-field input::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; filter: invert(0.5); }
 .jnx-export-go {
