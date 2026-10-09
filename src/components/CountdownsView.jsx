@@ -3,23 +3,24 @@ import Select from './Select';
 import { genId } from '../trackers/trackerUtils';
 import { logActivity, diffObjects } from '../utils/activityLog';
 import { localDateStr } from '../utils/date';
-import {
-  loadCountdowns as loadCountdownsCloud,
-  saveCountdowns as saveCountdownsCloud,
-  loadCountdownPinned,
-  saveCountdownPinned,
-} from '../utils/countdownsStore';
 
-// ─── Storage — thin wrappers around the cloud store ───────────────
+// ─── Storage ───────────────────────────────────────────────────────
+const CD_KEY = 'nook_countdowns';
+const PINNED_KEY = 'nook_countdown_pinned';
+
+function loadCountdowns() {
+  try { return JSON.parse(localStorage.getItem(CD_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveCountdowns(list) {
+  try { localStorage.setItem(CD_KEY, JSON.stringify(list)); } catch {}
+}
 function loadPinned() {
-  try { return localStorage.getItem('nook_countdown_pinned') || null; } catch { return null; }
+  try { return localStorage.getItem(PINNED_KEY) || null; } catch { return null; }
 }
 function savePinned(id) {
-  try { id ? localStorage.setItem('nook_countdown_pinned', id) : localStorage.removeItem('nook_countdown_pinned'); } catch {}
-  saveCountdownPinned(id ? [id] : []);
+  try { id ? localStorage.setItem(PINNED_KEY, id) : localStorage.removeItem(PINNED_KEY); } catch {}
 }
-function loadCountdowns() { return []; } // kept for legacy; actual load is async below
-function saveCountdowns(list) { saveCountdownsCloud(list); }
 
 // ─── Category / Priority meta ───────────────────────────────────────
 const PRESET_CATEGORIES = ['Personal', 'Work', 'Health', 'Learning', 'Travel'];
@@ -115,16 +116,10 @@ function makeCountdown(data) {
 
 // ─── Main view ─────────────────────────────────────────────────────
 export default memo(function CountdownsView() {
-  const [countdowns, setCountdowns] = useState([]);
-  const [cdsLoading, setCdsLoading] = useState(true);
+  const [countdowns, setCountdowns] = useState(loadCountdowns);
   const [pinnedId,   setPinnedId]   = useState(loadPinned);
   const [showModal,  setShowModal]  = useState(false);
   const [editingCd,  setEditingCd]  = useState(null);
-
-  useEffect(() => {
-    loadCountdownsCloud().then(data => { setCountdowns(data); setCdsLoading(false); });
-    loadCountdownPinned().then(ids => { if (ids && ids.length) setPinnedId(ids[0]); });
-  }, []);
 
   const [filterCategory,   setFilterCategory]   = useState('all');
   const [filterPriorities, setFilterPriorities] = useState(new Set());

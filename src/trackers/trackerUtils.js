@@ -1,53 +1,37 @@
 // ─── Storage ──────────────────────────────────────────────────────
 const SK = 'nook-trackers';
-const CLOUD_KEY = 'trackers';
-
-function dedupe(list) {
-  const seenId = new Set(), seenName = new Set();
-  return list.filter(t => {
-    if (seenId.has(t.id)) return false;
-    seenId.add(t.id);
-    const nameKey = (t.name || '').trim().toLowerCase();
-    if (seenName.has(nameKey)) return false;
-    seenName.add(nameKey);
-    return true;
-  });
-}
 
 export function loadTrackers() {
   try {
-    return dedupe(JSON.parse(localStorage.getItem(SK) || '[]'));
+    const list = JSON.parse(localStorage.getItem(SK) || '[]');
+    const seenId = new Set();
+    const seenName = new Set();
+    return list.filter(t => {
+      if (seenId.has(t.id)) return false;
+      seenId.add(t.id);
+      const nameKey = (t.name || '').trim().toLowerCase();
+      if (seenName.has(nameKey)) return false;
+      seenName.add(nameKey);
+      return true;
+    });
   } catch { return []; }
 }
-
-export async function loadTrackersCloud() {
-  try {
-    const { cloudGet } = await import('../utils/api.js');
-    const cloud = await cloudGet(CLOUD_KEY);
-    if (cloud != null) return dedupe(cloud);
-  } catch {}
-  return loadTrackers();
-}
-
-// Same retention pattern as utils/activityLog.js's MAX_ENTRIES
+// Same retention pattern as utils/activityLog.js's MAX_ENTRIES: a tracker
+// logged daily for MAX_LOGS_PER_TRACKER days (~5.5 years) is a real amount of
+// history, but `logs` otherwise grows forever with no cap, and it's the
+// largest unbounded store in the app across long-term daily use. Capped per
+// tracker (not globally) since each tracker's logs are independent history.
 const MAX_LOGS_PER_TRACKER = 2000;
 
 export function saveTrackers(list) {
   try {
     const capped = list.map(t => {
       if (!Array.isArray(t.logs) || t.logs.length <= MAX_LOGS_PER_TRACKER) return t;
+      // logs are date-sorted ascending (see upsertLog) — drop the oldest, keep the newest.
       return { ...t, logs: t.logs.slice(-MAX_LOGS_PER_TRACKER) };
     });
     localStorage.setItem(SK, JSON.stringify(capped));
   } catch {}
-}
-
-export async function saveTrackersCloud(list) {
-  try {
-    const { cloudSet } = await import('../utils/api.js');
-    await cloudSet(CLOUD_KEY, list);
-  } catch {}
-  saveTrackers(list);
 }
 
 // ─── Meta ──────────────────────────────────────────────────────────

@@ -129,7 +129,7 @@ export default memo(function ActivityLogView({ setActiveTab }) {
   const [undoSecs,    setUndoSecs]    = useState(10);
   const undoIntervalRef = useRef(null);
 
-  const reload = useCallback(() => { loadActivityLog().then(data => { setLog(data); setPage(1); }); }, []);
+  const reload = useCallback(() => { setLog(loadActivityLog()); setPage(1); }, []);
   useEffect(() => { reload(); }, [reload]);
 
   // Keep the view live: reload whenever the log is written to.
@@ -140,7 +140,7 @@ export default memo(function ActivityLogView({ setActiveTab }) {
     let lastReload = 0;
     const throttledReload = () => {
       const now = Date.now();
-      if (now - lastReload > 1500) { lastReload = now; loadActivityLog().then(setLog); }
+      if (now - lastReload > 1500) { lastReload = now; setLog(loadActivityLog()); }
     };
     const onStorage = (e) => { if (e.key === 'nook-activity-log') throttledReload(); };
     const onCustom   = () => throttledReload();

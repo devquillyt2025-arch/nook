@@ -2,9 +2,12 @@ import { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
 import { genId } from '../utils/id';
-import { loadLinks, saveLinks } from '../utils/linksStore';
 
+const STORAGE_KEY = 'nook_links';
 const BASE_CATS = ['Personal', 'Work', 'Finance', 'Read Later', 'Entertainment'];
+
+function load()  { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } }
+function save(e) { localStorage.setItem(STORAGE_KEY, JSON.stringify(e)); }
 
 function domain(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
@@ -386,14 +389,9 @@ function LinksModal({ entry, existingCats, onSave, onClose }) {
 
 // ── Main LinksView ────────────────────────────────────────────────
 export default memo(function LinksView() {
-  const [links,     setLinks]     = useState([]);
-  const [linksLoading, setLinksLoading] = useState(true);
+  const [links,     setLinks]     = useState(load);
   const [query,     setQuery]     = useState('');
   const [catFilter, setCatFilter] = useState('');
-
-  useEffect(() => {
-    loadLinks().then(data => { setLinks(data); setLinksLoading(false); });
-  }, []);
   const [modal,     setModal]     = useState(null); // null | 'add' | entry
   const [viewMode,  setViewMode]  = useState('grid'); // 'grid' | 'list'
 
@@ -402,7 +400,7 @@ export default memo(function LinksView() {
       const exists = prev.find(l => l.id === link.id);
       const next = exists ? prev.map(l => l.id === link.id ? link : l) : [link, ...prev];
       logActivity({ module: 'links', entity_type: 'link', entity_id: link.id, action: exists ? 'updated' : 'created', title: link.name || link.url });
-      saveLinks(next); return next;
+      save(next); return next;
     });
   };
 
@@ -411,7 +409,7 @@ export default memo(function LinksView() {
       const existing = prev.find(l => l.id === id);
       if (existing) logActivity({ module: 'links', entity_type: 'link', entity_id: id, action: 'deleted', title: existing.name || existing.url });
       const next = prev.filter(l => l.id !== id);
-      saveLinks(next);
+      save(next);
       return next;
     });
   };
@@ -421,7 +419,7 @@ export default memo(function LinksView() {
       const next = prev.map(l => l.id === id ? { ...l, starred: !l.starred } : l);
       const existing = next.find(l => l.id === id);
       if (existing) logActivity({ module: 'links', entity_type: 'link', entity_id: id, action: 'updated', title: `Star ${existing.starred ? 'added' : 'removed'}: ${existing.name || existing.url}` });
-      saveLinks(next); return next;
+      save(next); return next;
     });
   };
 

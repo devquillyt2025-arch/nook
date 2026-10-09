@@ -2,7 +2,10 @@ import { memo,  useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
 import { genId } from '../utils/id';
-import { loadVault, saveVault } from '../utils/vaultStore';
+
+const STORAGE_KEY = 'nook_vault';
+function load()   { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } }
+function save(e)  { localStorage.setItem(STORAGE_KEY, JSON.stringify(e)); }
 
 // Deterministic colour from a string
 function serviceColor(str) {
@@ -327,16 +330,11 @@ function ServiceGroup({ serviceName, accounts, defaultOpen, onEdit, onDelete, on
 
 // ── Main VaultView ────────────────────────────────────────────────
 export default memo(function VaultView() {
-  const [entries,  setEntries]  = useState([]);
-  const [vaultLoading, setVaultLoading] = useState(true);
+  const [entries,  setEntries]  = useState(load);
   const [query,    setQuery]    = useState('');
   const [modal,    setModal]    = useState(null); // null | { mode:'add', service? } | { mode:'edit', entry }
 
-  useEffect(() => {
-    loadVault().then(data => { setEntries(data); setVaultLoading(false); });
-  }, []);
-
-  const persist = (next) => { setEntries(next); saveVault(next); };
+  const persist = (next) => { setEntries(next); save(next); };
 
   const saveEntry = (entry) => {
     setEntries(prev => {

@@ -1,5 +1,4 @@
 const STORAGE_KEY = 'nook-activity-log';
-const CLOUD_KEY   = 'activity_log';
 const MAX_ENTRIES = 2000;
 
 function genId() {
@@ -32,8 +31,8 @@ export function logActivity({
     log.unshift(entry);
     if (log.length > MAX_ENTRIES) log.length = MAX_ENTRIES;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(log));
-    // Async cloud sync — fire-and-forget, never blocks the caller.
-    import('./api.js').then(({ cloudSet }) => cloudSet(CLOUD_KEY, log)).catch(() => {});
+    // Notify ActivityLogView (if mounted) so it can refresh without polling.
+    // Fire-and-forget; never throws.
     try { window.dispatchEvent(new Event('nook-activity-updated')); } catch {}
     return entry;
   } catch (err) {
@@ -41,21 +40,17 @@ export function logActivity({
   }
 }
 
-export async function loadActivityLog() {
-  try {
-    const { cloudGet } = await import('./api.js');
-    const cloud = await cloudGet(CLOUD_KEY);
-    if (cloud != null) return cloud;
-  } catch {}
+export function loadActivityLog() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 export function clearActivityLog() {
   localStorage.removeItem(STORAGE_KEY);
-  import('./api.js').then(({ cloudDelete }) => cloudDelete(CLOUD_KEY)).catch(() => {});
 }
 
 // Returns [{field, from, to}] for changed fields, or null if nothing changed.

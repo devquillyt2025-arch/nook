@@ -12,9 +12,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { cloudGet, cloudSet } from './utils/api';
-import { saveTrackersCloud, loadTrackersCloud } from './trackers/trackerUtils';
-import { loadHabitsCloud, saveHabitsCloud } from './habitsStore';
 import { CAT_META } from './utils/categoryMeta';
 import Timer from './components/Timer';
 import Stats from './components/Stats';
@@ -671,41 +668,13 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  // ── Neon hydration: load non-Supabase slices from cloud on mount ──
-  // Tasks/habits are handled by the Supabase reconcile above; everything
-  // else (settings, pomoLog, intentions, trackers) gets a simpler
-  // cloud-wins load here. Falls through silently when not signed in.
-  useEffect(() => {
-    (async () => {
-      const [nSettings, nPomoLog, nIntentions, nTrackers, nTheme] = await Promise.all([
-        cloudGet('pomo_settings'),
-        cloudGet('pomo_log'),
-        cloudGet('intentions'),
-        cloudGet('trackers'),
-        cloudGet('theme'),
-      ]);
-      if (nSettings != null) setSettings(s => ({
-        focusDuration:  nSettings.focusDuration  ?? s.focusDuration,
-        shortDuration:  nSettings.shortDuration  ?? s.shortDuration,
-        longDuration:   nSettings.longDuration   ?? s.longDuration,
-        customDuration: nSettings.customDuration ?? s.customDuration,
-        autoSwitch:     nSettings.autoSwitch     ?? s.autoSwitch,
-        sound:          nSettings.sound          ?? s.sound,
-      }));
-      if (nPomoLog != null) setPomodoroLog(nPomoLog);
-      if (nIntentions != null) setIntentions(prev => nIntentions.date === prev.date ? nIntentions : prev);
-      if (nTrackers != null) setTrackers(nTrackers);
-      if (nTheme != null && ['dark', 'light'].includes(nTheme)) setTheme(nTheme);
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Persistence (localStorage + Neon cloud) ──
-  useEffect(() => { persist(SK.tasks,      tasks);      cloudSet('tasks',      tasks);      }, [tasks]);
-  useEffect(() => { persist(SK.settings,   settings);   cloudSet('pomo_settings', settings);   }, [settings]);
-  useEffect(() => { persist(SK.pomoLog,    pomodoroLog); cloudSet('pomo_log',   pomodoroLog); }, [pomodoroLog]);
-  useEffect(() => { persist(SK.intentions, intentions); cloudSet('intentions', intentions); }, [intentions]);
-  useEffect(() => { saveTrackersCloud(trackers);         }, [trackers]);
-  useEffect(() => { saveHabitsCloud(habits);             }, [habits]);
+  // ── Persistence ──
+  useEffect(() => { persist(SK.tasks,      tasks);      }, [tasks]);
+  useEffect(() => { persist(SK.settings,   settings);   }, [settings]);
+  useEffect(() => { persist(SK.pomoLog,    pomodoroLog); }, [pomodoroLog]);
+  useEffect(() => { persist(SK.intentions, intentions); }, [intentions]);
+  useEffect(() => { saveTrackers(trackers);              }, [trackers]);
+  useEffect(() => { saveHabits(habits);                  }, [habits]);
   useEffect(() => {
     // One-time migration: copy type='habit' trackers into the habits store
     const migrated = migrateFromTrackers(trackers);
@@ -713,7 +682,6 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     persist(SK.theme, theme);
-    cloudSet('theme', theme);
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 

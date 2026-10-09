@@ -1,5 +1,4 @@
-import { useState, useMemo, useEffect, useSyncExternalStore } from 'react';
-import { loadGoals } from '../utils/goalsStore';
+import { useState, useMemo, useSyncExternalStore } from 'react';
 import Select from './Select';
 import { getTickSeconds, subscribeTick } from '../utils/timerTickStore';
 import { TRACKER_CATS, isScheduledToday, isLoggedToday } from '../trackers/trackerUtils';
@@ -94,14 +93,8 @@ export default function DailyGoalsView({
   const journalPendingCount = journalEntries.some(e => e.date === todayLocalStr && getJournalPreview(e.content) !== 'No entry yet') ? 0 : 1;
   const eventsCount = intentions?.items?.filter(i => !i.done).length || trackers?.filter(t => isScheduledToday(t) && !isLoggedToday(t)).length || 0;
 
-  // Load preview data from cloud, fall back to localStorage
-  const [activeGoals, setActiveGoals] = useState(() => loadActiveGoals());
-  useEffect(() => {
-    loadGoals().then(list => {
-      const live = (list || []).filter(g => !g.completed).slice(0, 3);
-      if (live.length) setActiveGoals(live);
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Load preview data (once per mount — see journalEntries note above)
+  const activeGoals = useMemo(() => loadActiveGoals(), []);
 
   // Recent Activity feed (mix of completed tasks & habits today)
   const recentActivity = [
