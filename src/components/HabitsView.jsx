@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, memo, useRef } from 'react';
+import TimeInput from './TimeInput';
 import {
   HABIT_CATS, ACCENT_COLORS, localDateStr,
   isScheduledToday, isScheduledOn, isCompletedToday, isCompletedOn,
@@ -627,8 +628,7 @@ function HabitModal({ onSave, onClose, editHabit = null }) {
                 <div className="toggle-thumb" />
               </div>
               {form.reminderEnabled && (
-                <input
-                  type="time"
+                <TimeInput
                   className="form-inp"
                   style={{ maxWidth: 130 }}
                   value={form.reminderTime}
