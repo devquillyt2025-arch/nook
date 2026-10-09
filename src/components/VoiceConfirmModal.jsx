@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import Select from './Select';
+import DateInput from './DateInput';
+import TimeInput from './TimeInput';
 import { motion } from 'framer-motion';
 import { CAT_META } from '../utils/categoryMeta';
 import { PRI_META } from '../utils/priorityMeta';
@@ -88,23 +91,21 @@ function EditBody({ tool, form, set, onClose, onConfirm }) {
           </div>
           <div className="form-grp">
             <label>Due date</label>
-            <input type="date" className="form-inp" value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
+            <DateInput className="form-inp" value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
           </div>
           <div className="form-grp">
             <label>Time</label>
-            <input type="time" className="form-inp" value={form.time} onChange={e => set('time', e.target.value)} />
+            <TimeInput className="form-inp" value={form.time} onChange={e => set('time', e.target.value)} />
           </div>
           <div className="form-grp">
             <label>Priority</label>
-            <select className="form-inp" value={form.priority} onChange={e => set('priority', e.target.value)}>
-              {Object.entries(PRI_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
-            </select>
+            <Select className="form-inp" value={form.priority} onChange={e => set('priority', e.target.value)}
+              options={Object.entries(PRI_META).map(([k, m]) => ({ value: k, label: m.label }))} />
           </div>
           <div className="form-grp">
             <label>Category</label>
-            <select className="form-inp" value={form.category} onChange={e => set('category', e.target.value)}>
-              {Object.entries(CAT_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
-            </select>
+            <Select className="form-inp" value={form.category} onChange={e => set('category', e.target.value)}
+              options={Object.entries(CAT_META).map(([k, m]) => ({ value: k, label: m.label }))} />
           </div>
           <div className="form-grp">
             <label>Notes</label>

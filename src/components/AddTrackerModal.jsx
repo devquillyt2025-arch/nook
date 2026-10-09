@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import DateInput from './DateInput';
+import TimeInput from './TimeInput';
 import { motion } from 'framer-motion';
 import {
   TRACKER_CATS, TRACKER_TYPES, genId, defaultConfig,
@@ -221,7 +223,7 @@ function HabitFields({ config, setC }) {
       <div className="form-grp">
         <label>Daily Reminder (optional)</label>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <input type="time" className="form-inp" style={{ maxWidth: 150 }}
+          <TimeInput className="form-inp" style={{ maxWidth: 150 }}
             value={config.reminderTime ?? ''}
             onChange={e => setC('reminderTime', e.target.value)} />
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Get a push notification</span>
@@ -261,7 +263,7 @@ function TargetFields({ config, setC }) {
         </div>
         <div className="form-grp">
           <label>Target Date</label>
-          <input type="date" className="form-inp"
+          <DateInput className="form-inp"
             value={config.targetDate ?? ''}
             onChange={e => setC('targetDate', e.target.value)} />
         </div>
@@ -334,7 +336,7 @@ function ProjectFields({ config, setC }) {
     <>
       <div className="form-grp">
         <label>Target Date</label>
-        <input type="date" className="form-inp"
+        <DateInput className="form-inp"
           value={config.targetDate ?? ''}
           onChange={e => setC('targetDate', e.target.value)} />
       </div>
