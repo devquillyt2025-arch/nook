@@ -1,6 +1,9 @@
 import { memo,  useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import DateInput from './DateInput';
+import TimeInput from './TimeInput';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
+import { useSyncApplied } from '../utils/useSyncApplied';
 import {
   isGCalConnected,
   getCalendarToken, fetchGCalEvents, createGCalEvent, gcalColor,
@@ -113,6 +116,9 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
 
   const [customEvents, setCustomEvents] = useState(() => {
     try { return JSON.parse(localStorage.getItem('nook-calendar-events') || '[]'); } catch { return []; }
+  });
+  useSyncApplied(['calendar_events'], () => {   // another device's change, merged into storage
+    try { setCustomEvents(JSON.parse(localStorage.getItem('nook-calendar-events') || '[]')); } catch {}
   });
 
   const saveCustomEvent = ev => {
@@ -729,15 +735,15 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                   <div>
                     <label style={LABEL_STYLE}>Date</label>
-                    <input type="date" value={modalDate} onChange={e => setModalDate(e.target.value)} required style={{ ...INPUT_STYLE, fontSize: '0.85rem', padding: '10px 12px', colorScheme: 'dark' }} />
+                    <DateInput value={modalDate} onChange={e => setModalDate(e.target.value)} required style={{ ...INPUT_STYLE, fontSize: '0.85rem', padding: '10px 12px', colorScheme: 'dark' }} />
                   </div>
                   <div>
                     <label style={LABEL_STYLE}>Start</label>
-                    <input type="time" value={modalTime} onChange={e => setModalTime(e.target.value)} style={{ ...INPUT_STYLE, fontSize: '0.85rem', padding: '10px 12px', colorScheme: 'dark' }} />
+                    <TimeInput value={modalTime} onChange={e => setModalTime(e.target.value)} style={{ ...INPUT_STYLE, fontSize: '0.85rem', padding: '10px 12px', colorScheme: 'dark' }} />
                   </div>
                   <div>
                     <label style={LABEL_STYLE}>End</label>
-                    <input type="time" value={modalEndTime} onChange={e => setModalEndTime(e.target.value)} style={{ ...INPUT_STYLE, fontSize: '0.85rem', padding: '10px 12px', colorScheme: 'dark' }} />
+                    <TimeInput value={modalEndTime} onChange={e => setModalEndTime(e.target.value)} style={{ ...INPUT_STYLE, fontSize: '0.85rem', padding: '10px 12px', colorScheme: 'dark' }} />
                   </div>
                 </div>
                 <div>
@@ -788,11 +794,11 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <label style={LABEL_STYLE}>Start Time</label>
-                    <input type="time" value={detailEvent.time || ''} onChange={e => setDetailEvent({ ...detailEvent, time: e.target.value, isAllDay: !e.target.value })} style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
+                    <TimeInput value={detailEvent.time || ''} onChange={e => setDetailEvent({ ...detailEvent, time: e.target.value, isAllDay: !e.target.value })} style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
                   </div>
                   <div>
                     <label style={LABEL_STYLE}>End Time</label>
-                    <input type="time" value={detailEvent.endTime || ''} onChange={e => setDetailEvent({ ...detailEvent, endTime: e.target.value })} style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
+                    <TimeInput value={detailEvent.endTime || ''} onChange={e => setDetailEvent({ ...detailEvent, endTime: e.target.value })} style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
                   </div>
                 </div>
                 <div>
