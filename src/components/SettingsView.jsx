@@ -1,10 +1,15 @@
 import { memo,  useState, useEffect, useRef } from 'react';
+import TimeInput from './TimeInput';
 import { connectGoogleTasks, disconnectGoogleTasks } from '../utils/googleTasksSync';
 import { supabase, isAuthConfigured } from '../utils/authClient';
 import { isPushSupported, isCurrentlySubscribed, subscribeToPush, unsubscribeFromPush } from '../utils/pushSubscription';
 import { isEmailRemindersEnabled, setEmailRemindersEnabled } from '../utils/notificationPrefs';
 import { listReminders } from '../utils/reminders';
 import { exportBackup } from '../utils/backup';
+import { useSyncApplied } from '../utils/useSyncApplied';
+import { useSyncStatus } from '../utils/useSyncStatus';
+import { syncNow } from '../utils/sync';
+import AccountSignIn from './AccountSignIn';
 import { connectGoogleDriveBackup, getBackupConfig, isDriveConnected, getDriveConnectionState, setBackupFrequency, getRecentRuns, runDriveBackup } from '../utils/driveBackup';
 import Select from './Select';
 
@@ -121,6 +126,14 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
   // Preferences state
   const [form, setForm] = useState(settings);
   const [weekStart, setWeekStart] = useState(() => localStorage.getItem('nook-week-start') || 'monday');
+  const sync = useSyncStatus();
+  // Profile / week-start edited on another device: re-read what the sync engine merged into storage.
+  useSyncApplied(['profile_name', 'profile_email', 'profile_avatar', 'week_start'], (names) => {
+    if (names.includes('profile_name'))   setProfileName(localStorage.getItem('nook-profile-name') || 'Productivity User');
+    if (names.includes('profile_email'))  setProfileEmail(localStorage.getItem('nook-profile-email') || '');
+    if (names.includes('profile_avatar')) setAvatar(localStorage.getItem('nook-profile-avatar') || '😎');
+    if (names.includes('week_start'))     setWeekStart(localStorage.getItem('nook-week-start') || 'monday');
+  });
   const [backupBusy, setBackupBusy] = useState(false);
   const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem('nook_ai_api_key') || '');
 
@@ -184,13 +197,16 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
   // profile email above, which is a local display name and proves nothing about
   // whether cloud features (reminders, sync, backup) can actually work.
   const [accountEmail, setAccountEmail] = useState(null);
+  const [accountChecked, setAccountChecked] = useState(!isAuthConfigured);   // don't flash the sign-in form at a signed-in user
   useEffect(() => {
     if (!isAuthConfigured) return;
     let alive = true;
     supabase.auth.getUser()
-      .then(({ data }) => { if (alive) setAccountEmail(data?.user?.email ?? null); })
-      .catch(() => {});
-    return () => { alive = false; };
+      .then(({ data }) => { if (alive) { setAccountEmail(data?.user?.email ?? null); setAccountChecked(true); } })
+      .catch(() => { if (alive) setAccountChecked(true); });
+    // Follow sign-in / sign-out too (e.g. from the sign-in form below, or another tab).
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => { if (alive) { setAccountEmail(s?.user?.email ?? null); setAccountChecked(true); } });
+    return () => { alive = false; sub?.subscription?.unsubscribe(); };
   }, []);
 
   const driveState = getDriveConnectionState(driveConfig);
@@ -292,13 +308,16 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
       // "Download started", not "downloaded ✓" — a browser can silently block,
       // cancel, or redirect a triggered download with no JS-visible signal
       // either way, so we can only confirm the file was built, not saved.
-      // Also: this backup includes your saved-login passwords in plaintext.
+      // The Saved Logins tab is gone, but a browser that used it still holds
+      // those passwords in plaintext and the backup sweeps every nook_ key — so
+      // say so, but only when it is actually true.
+      const leftoverLogins = countJson('nook_vault');
       alert(
         `Backup download started\n\n` +
         `• ${counts.local} local data set${counts.local === 1 ? '' : 's'} (tasks, notes, journal, etc.)\n` +
         `• ${counts.reminders} reminder${counts.reminders === 1 ? '' : 's'}\n` +
-        `• ${counts.notification_prefs} preference row${counts.notification_prefs === 1 ? '' : 's'}\n\n` +
-        `Includes your Saved Logins in plaintext — keep this .zip somewhere safe.`
+        `• ${counts.notification_prefs} preference row${counts.notification_prefs === 1 ? '' : 's'}` +
+        (leftoverLogins > 0 ? `\n\nIncludes ${leftoverLogins} old saved login${leftoverLogins === 1 ? '' : 's'} (passwords in plaintext) — keep this .zip somewhere safe.` : '')
       );
     } catch (err) {
       console.error('[Backup] export failed:', err);
@@ -503,11 +522,34 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
 
         <ConnRow
           label="Account"
-          tone={!isAuthConfigured ? 'off' : accountEmail ? 'ok' : 'warn'}
+          tone={!isAuthConfigured || !accountChecked ? 'off' : accountEmail ? 'ok' : 'warn'}
           detail={!isAuthConfigured
             ? 'Local only — no cloud features'
-            : accountEmail || 'Signed out'}
+            : accountEmail || (accountChecked ? 'Signed out' : 'Checking…')}
         />
+        {isAuthConfigured && accountChecked && !accountEmail && <AccountSignIn />}
+        {isAuthConfigured && (
+          <ConnRow
+            label="Cross-device sync"
+            tone={!sync.active ? 'off' : sync.state === 'error' || (sync.pending > 0 && sync.state !== 'syncing') ? 'warn' : 'ok'}
+            detail={
+              <>
+                {!sync.active ? 'Waiting for sign-in'
+                  : sync.state === 'syncing' ? 'Syncing…'
+                  : sync.state === 'error' ? `Couldn’t reach the server — ${sync.pending} change${sync.pending === 1 ? '' : 's'} waiting`
+                  : sync.pending > 0 ? `${sync.pending} change${sync.pending === 1 ? '' : 's'} waiting to upload`
+                  : sync.lastSyncAt ? `Up to date · ${new Date(sync.lastSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  : 'Connected'}
+                {sync.active && sync.state !== 'syncing' && (
+                  <button type="button" onClick={() => syncNow()}
+                    style={{ marginLeft: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 600, padding: 0 }}>
+                    Sync now
+                  </button>
+                )}
+              </>
+            }
+          />
+        )}
         <ConnRow
           label="Google Tasks"
           tone={syncStatus === 'Not connected' ? 'off' : 'ok'}
@@ -561,7 +603,7 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
               <div className="set-row-sub">Daily summary of pending trackers</div>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginLeft: 'auto' }}>
-              <input type="time" className="form-inp" value={morningTime} onChange={e => setMorningTime(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600, background: 'var(--bg-surface)', width: 118 }} />
+              <TimeInput className="form-inp" value={morningTime} onChange={e => setMorningTime(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600, background: 'var(--bg-surface)', width: 118 }} />
               <div className="toggle-track" onClick={() => setNotifMorning(!notifMorning)} data-on={notifMorning ? 'true' : 'false'} style={{ cursor: 'pointer', flexShrink: 0 }}><div className="toggle-thumb" /></div>
             </div>
           </div>
@@ -811,15 +853,16 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: 14 }}>
           Your content is stored locally in your browser ({calculateStorage()} KB used
           {quotaPct !== null && <span style={{ color: quotaPct >= 80 ? 'var(--color-red)' : 'inherit', fontWeight: quotaPct >= 80 ? 700 : 400 }}> — {quotaPct}% of your browser's storage limit for this site</span>}).
-          A full backup also bundles your reminders, notification preferences, and
-          your Saved Logins (passwords included, unencrypted) — store the file
-          somewhere you'd store a password export.
+          A full backup also bundles your reminders and notification preferences.
+          {inventory?.vault > 0 && ` It also still contains ${inventory.vault} old saved login${inventory.vault === 1 ? '' : 's'} (passwords in plaintext) from the removed Saved Logins tab — store the file somewhere you'd store a password export.`}
         </p>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: 14 }}>
           <strong style={{ color: 'var(--text-primary)' }}>Clear Local Data</strong> only erases this
-          browser's copy. Synced tasks and habits stay in the cloud and come back on the next
-          load, and reminders are kept. Importing replaces local data — a rollback copy of your
-          current data is downloaded automatically first.
+          browser's copy. Everything synced to your account — tasks, habits, notes, journal and
+          the rest — stays in the cloud and comes back on the next load, and reminders are kept.
+          Importing replaces this browser's data when you're signed out; when you're signed in it
+          is merged with your account instead, so nothing on your other devices is deleted. A
+          rollback copy of your current data is downloaded automatically first.
         </p>
         {quotaPct !== null && quotaPct >= 80 && (
           <p style={{ color: 'var(--color-red)', fontSize: '0.78rem', lineHeight: 1.5, marginTop: -6, marginBottom: 14 }}>
@@ -850,7 +893,7 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
                 ['Notes', inventory.notes],
                 ['Links', inventory.links],
                 ['Countdowns', inventory.countdowns],
-                ['Saved logins', inventory.vault],
+                ...(inventory.vault > 0 ? [['Old saved logins (tab removed)', inventory.vault]] : []),
                 ['Reminders', inventory.reminders],
               ].map(([label, n]) => (
                 <span key={label} style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
@@ -861,6 +904,19 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
                 </span>
               ))}
             </div>
+            {inventory.vault > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <button type="button"
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-red)', fontSize: '0.78rem', fontWeight: 700 }}
+                  onClick={() => {
+                    if (!confirm(`Permanently delete the ${inventory.vault} old saved login${inventory.vault === 1 ? '' : 's'} (usernames and passwords) from this browser?\n\nThe Saved Logins tab no longer exists, so this is the only way to remove them other than Clear Local Data. This cannot be undone.`)) return;
+                    try { localStorage.removeItem('nook_vault'); } catch {}
+                    setInventory(inv => inv && { ...inv, vault: 0 });
+                  }}>
+                  Delete old saved logins
+                </button>
+              </div>
+            )}
           </div>
         )}
 
