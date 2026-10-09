@@ -2,18 +2,41 @@ import { useState, useEffect } from 'react';
 import { supabase, isAuthConfigured } from '../utils/authClient';
 import AuthPage from './AuthPage';
 
-/* 
- * NOTE: AuthGate and AuthPage are purposefully bypassed in main.jsx 
- * for local-only use right now. We are keeping the code here because 
- * we will use it in the future when we add cloud sync/accounts.
- */
-
 // Gates the app behind email/password auth — but ONLY when Supabase env vars
 // are present. Without them, the app renders exactly as before (no login),
 // so adding this can't break the existing experience.
+
+// A stored supabase-js session (the `sb-<ref>-auth-token` record, not its `-code-verifier`
+// / `-user` siblings), whatever its token state.
+function hasStoredSession() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !/^sb-.+-auth-token$/.test(k)) continue;
+      const v = JSON.parse(localStorage.getItem(k) || 'null');
+      if (v && v.refresh_token) return true;
+    }
+  } catch { /* unreadable storage ⇒ treat as none */ }
+  return false;
+}
+
+// Offline-safe: getSession() — and the INITIAL_SESSION event — report "no session" when the
+// access token (1 h) has expired AND the refresh request can't reach the server. That is not
+// "signed out": supabase-js clears the stored session when a refresh is refused for good
+// and keeps it when the network is merely down. So a session that is still in storage means
+// "could not verify", and the user is let in — their data is local, and a login wall that
+// blocks it offline would be worse than useless. If the session later proves revoked,
+// supabase-js emits SIGNED_OUT and the gate closes again.
+const UNVERIFIED_SESSION = { unverified: true };
+const sessionOrUnverified = (event, s) =>
+  s ?? (event !== 'SIGNED_OUT' && hasStoredSession() ? UNVERIFIED_SESSION : null);
+
 export default function AuthGate({ children }) {
-  // undefined = still checking the session; null = signed out; object = signed in
-  const [session, setSession] = useState(isAuthConfigured ? undefined : null);
+  // undefined = still checking the session; null = signed out; object = signed in.
+  // A session already in storage is trusted at once (no spinner, and no ~25 s wait while
+  // supabase-js retries a refresh that can't reach the server); the check below confirms it
+  // in the background and closes the gate if it turns out to be revoked.
+  const [session, setSession] = useState(() => !isAuthConfigured ? null : hasStoredSession() ? UNVERIFIED_SESSION : undefined);
   const [ssoError, setSsoError] = useState('');
 
   useEffect(() => {
@@ -62,10 +85,10 @@ export default function AuthGate({ children }) {
         }
       }
       const { data } = await supabase.auth.getSession();
-      if (active) setSession(data.session ?? null);
+      if (active) setSession(sessionOrUnverified('GET_SESSION', data.session));
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => setSession(sessionOrUnverified(event, s)));
     return () => { active = false; sub.subscription.unsubscribe(); };
   }, []);
 
