@@ -810,6 +810,7 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
                     if (detailEvent.type === 'event') {
                       // Custom events have no "unscheduled" state and no other delete path,
                       // so removing them from the calendar means deleting the record.
+                      if (!confirm(`Delete "${detailEvent.title || 'this event'}"?`)) return;
                       const u = customEvents.filter(e => e.id !== detailEvent.id);
                       setCustomEvents(u); localStorage.setItem('nook-calendar-events', JSON.stringify(u));
                       logActivity({ module: 'calendar', entity_type: 'calendar_event', entity_id: detailEvent.id, action: 'deleted', title: detailEvent.title });
