@@ -293,7 +293,7 @@ export function NoteModal({ note, onSave, onClose, onDelete, onColorChange }) {
               )}
             </div>
             {!isNew && (
-              <button onClick={() => { onDelete(note.id); onClose(); }} title="Delete note"
+              <button onClick={() => { if (confirm('Delete this note?')) { onDelete(note.id); onClose(); } }} title="Delete note"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-red)', padding: '6px', display: 'flex', alignItems: 'center', opacity: 1, transition: 'opacity 0.15s ease' }}
                 onMouseEnter={e => e.currentTarget.style.opacity = 0.8}
                 onMouseLeave={e => e.currentTarget.style.opacity = 1}>
@@ -438,7 +438,7 @@ export function NoteCard({ note, onOpen, onPin, onDelete, onTagClick, onColorSel
                       transition: 'transform 0.15s ease',
                     }} />
                   </button>
-                  <button onClick={e => { e.stopPropagation(); onDelete(note.id); }}
+                  <button onClick={e => { e.stopPropagation(); if (confirm('Delete this note?')) onDelete(note.id); }}
                     aria-label="Delete note"
                     title="Delete"
                     style={{ background: 'rgba(239,68,68,0.08)', border: 'none', cursor: 'pointer', color: 'var(--color-red)', width: 28, height: 28, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
