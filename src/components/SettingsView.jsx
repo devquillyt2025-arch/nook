@@ -9,7 +9,6 @@ import { exportBackup } from '../utils/backup';
 import { useSyncApplied } from '../utils/useSyncApplied';
 import { useSyncStatus } from '../utils/useSyncStatus';
 import { syncNow } from '../utils/sync';
-import AccountSignIn from './AccountSignIn';
 import { connectGoogleDriveBackup, getBackupConfig, isDriveConnected, getDriveConnectionState, setBackupFrequency, getRecentRuns, runDriveBackup } from '../utils/driveBackup';
 import Select from './Select';
 
@@ -447,8 +446,15 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
     try { disconnectGoogleTasks(); } catch {}
     try { if (gcalConnected) onDisconnectGCal(); } catch {}
     localStorage.setItem('nook_sync_enabled', 'false');
-    try { if (isAuthConfigured) await supabase.auth.signOut(); } catch {}
-    window.location.reload();
+    if (isAuthConfigured) {
+      // 'global' also revokes the session on the server; if that request fails the device must
+      // still be signed out, so fall back to dropping the local session.
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) await supabase.auth.signOut({ scope: 'local' });
+      } catch { try { await supabase.auth.signOut({ scope: 'local' }); } catch {} }
+    }
+    window.location.reload();                  // AuthGate then finds no session and shows the login page
   };
 
   const calculateStorage = () => {
@@ -465,6 +471,35 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
     <div className="settings-view">
 
       <div className="settings-grid">
+
+      {/* ── Account — first card on purpose: who is signed in, and Sign out ──
+          Sign-in itself is the login page (AuthGate), which signing out returns to. */}
+      {isAuthConfigured && (
+        <section className="settings-card" aria-label="Account">
+          <h3 className="settings-card-title">Account</h3>
+          {!accountChecked ? (
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: 0 }}>Checking…</p>
+          ) : accountEmail ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Signed in as</div>
+                  <div style={{ color: 'var(--text-primary)', fontSize: '0.92rem', fontWeight: 600, overflowWrap: 'anywhere' }}>{accountEmail}</div>
+                </div>
+                <button type="button" onClick={handleLogout}
+                  style={{ padding: '9px 18px', borderRadius: 10, border: '1px solid rgba(248,113,113,0.5)', background: 'var(--color-red-bg)', color: 'var(--color-red)', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>
+                  Sign out
+                </button>
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.5, margin: '10px 0 0' }}>
+                Your data syncs across every device signed in to this account. Signing out keeps your data on this device.
+              </p>
+            </>
+          ) : (
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: 0 }}>Not signed in.</p>
+          )}
+        </section>
+      )}
 
       {/* Profile Section */}
       <section className="settings-card">
@@ -525,9 +560,10 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
           tone={!isAuthConfigured || !accountChecked ? 'off' : accountEmail ? 'ok' : 'warn'}
           detail={!isAuthConfigured
             ? 'Local only — no cloud features'
-            : accountEmail || (accountChecked ? 'Signed out' : 'Checking…')}
+            : accountEmail
+              ? <span style={{ overflowWrap: 'anywhere' }}>{accountEmail}</span>
+              : (accountChecked ? 'Signed out' : 'Checking…')}
         />
-        {isAuthConfigured && accountChecked && !accountEmail && <AccountSignIn />}
         {isAuthConfigured && (
           <ConnRow
             label="Cross-device sync"
@@ -1031,13 +1067,15 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
 
       </div>{/* end settings-grid */}
 
-      {/* ── Log out ── */}
-      <button type="button" className="settings-logout-btn" onClick={handleLogout}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-        Log Out
-      </button>
+      {/* ── Log out — only while there is an account to log out of ── */}
+      {isAuthConfigured && accountEmail && (
+        <button type="button" className="settings-logout-btn" onClick={handleLogout}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Log Out
+        </button>
+      )}
     </div>
   );
 });
