@@ -1,12 +1,22 @@
 # 02 — Data Model & Storage
 
-This is the exhaustive reference for **what Nook stores and where.** If you
-rebuild the app, matching these keys and shapes gives you data compatibility.
+This is the exhaustive reference for **what Nook stores and where**, and — new since
+the cross-device sync work — **whether each piece follows you to other devices**. If
+you rebuild the app, matching these keys and shapes gives you data compatibility.
 
 > **Key-naming is inconsistent and load-bearing.** Some keys use **hyphens**
-> (`nook-tasks`), most feature modules use **underscores** (`nook_notes`). This is
-> historical and must not be "cleaned up" — renaming a key orphans real user data.
-> Always grep the literal string before touching a key.
+> (`nook-tasks`), most feature modules use **underscores** (`nook_notes`), and the
+> sync bookkeeping uses a **colon** (`nook:sync:…`). This is historical/deliberate and
+> must not be "cleaned up" — renaming a key orphans real user data. Always grep the
+> literal string before touching a key.
+
+**Sync column legend**
+
+| Value | Meaning |
+|---|---|
+| **tasks** / **habits** | Synced by `tasksService.js` / `habitsService.js` into the typed Supabase tables (per row, last-write-wins, Realtime). |
+| **synced_items: `<def>`** | Synced by the generic engine into `synced_items`; `<def>` is its name in `utils/syncDefs.js`. See [09](09-cross-device-sync.md). |
+| **device** | Deliberately never leaves this browser (credentials, per-device preferences, plumbing). |
 
 ---
 
@@ -14,58 +24,77 @@ rebuild the app, matching these keys and shapes gives you data compatibility.
 
 ### App-owned content (loaded into `App.jsx` state)
 
-| Key | Shape | Owner |
-|---|---|---|
-| `nook-tasks` | `Task[]` | `App.jsx` |
-| `nook-settings` | Pomodoro settings object | `App.jsx` |
-| `nook-theme` | `'dark' \| 'light'` (string) | `App.jsx` |
-| `nook-pomo-log` | `PomoEntry[]` (falls back to legacy `nook-analytics`) | `App.jsx` |
-| `nook-intentions` | `{ date, items[], history{} }` | `App.jsx` |
+| Key | Shape | Owner | Sync |
+|---|---|---|---|
+| `nook-tasks` | `Task[]` | `App.jsx` | **tasks** |
+| `nook_habits` | `Habit[]` | `habitsStore.js` (held in `App.jsx` state) | **habits** |
+| `nook-settings` | Pomodoro settings object | `App.jsx` | synced_items: `pomo_settings` |
+| `nook-theme` | `"dark" \| "light"` (**JSON string**) | `App.jsx` | synced_items: `theme` |
+| `nook-pomo-log` | `string[]` of ISO timestamps, one per completed focus session (legacy fallback `nook-analytics`) | `App.jsx` | synced_items: `pomo_log` |
+| `nook-intentions` | `{ date, items[], history{} }` | `App.jsx` | synced_items: `intentions` |
+| `nook-trackers` | `Tracker[]` (legacy — see below) | `trackers/trackerUtils.js` | synced_items: `trackers` |
+| `nook-active-tab` | tab id string (nav state only) | `App.jsx` | device |
 
 ### Feature-module content (module reads/writes its own key)
 
-| Key | Shape | Owner |
-|---|---|---|
-| `nook_notes` | `Note[]` | `NotesView` |
-| `nook_links` | `Link[]` (+ categories) | `LinksView` |
-| `nook_vault` | `VaultEntry[]` | `VaultView` |
-| `nook_countdowns` | `Countdown[]` | `CountdownsView` |
-| `nook_countdown_pinned` | `string[]` of countdown ids | `CountdownsView` |
-| `nook_habits` | `Habit[]` | `habitsStore.js` |
-| `nook_habits_migrated` | `'1'` flag (one-time migration) | `habitsStore.js` |
-| `nook-trackers` | `Tracker[]` | `trackers/trackerUtils.js` |
-| `nook_goals` | `Goal[]` | `DailyGoalsView` |
-| `nook-calendar-events` | `CalendarEvent[]` (custom events only) | `CalendarView` |
-| `nook_journal_<YYYY-MM-DD>` | `JournalEntry` — **one key per day** | `JournalView` |
-| `nook_journal_icons` | `{ [date]: emoji }` mood/icon map | `JournalView` |
-| `nook_journal_calview` | journal calendar view mode (`week`/`month`) | `JournalView` |
-| `nook_journal_calcollapsed` | journal calendar collapsed flag | `JournalView` |
-| `nook-activity-log` | `ActivityEntry[]` (write-only from app POV) | `utils/activityLog.js` |
-| `nook-weekly-reviews` | weekly-review snapshots | `App.jsx` / `AnalyticsDashboard` |
-| `nook_custom_categories` | user-added task categories | `TaskList` |
-| `nook_task_sort` | task sort preference | `TaskList` |
+| Key | Shape | Owner | Sync |
+|---|---|---|---|
+| `nook_notes` | `Note[]` | `NotesView` / `notesStore.js` | synced_items: `notes` |
+| `nook_links` | `Link[]` | `LinksView` | synced_items: `links` |
+| `nook_countdowns` | `Countdown[]` | `CountdownsView` | synced_items: `countdowns` |
+| `nook_countdown_pinned` | **raw string** — the pinned countdown's id | `CountdownsView` | synced_items: `countdown_pinned` |
+| `nook_goals` | `Goal[]` — **read-only today** (nothing writes it) | `DailyGoalsView`, `aiContext.js` | synced_items: `goals` |
+| `nook-calendar-events` | `CalendarEvent[]` (custom events only) | `CalendarView` | synced_items: `calendar_events` |
+| `nook_journal_<YYYY-MM-DD>` | `JournalEntry` — **one key per day** | `JournalView` | synced_items: `journal` |
+| `nook_journal_icons` | `{ [date]: emoji }` mood map | `JournalView` | synced_items: `journal_icons` |
+| `nook-activity-log` | `ActivityEntry[]` (newest first, cap 2000) | `utils/activityLog.js` | synced_items: `activity_log` |
+| `nook_chat_history` | `ChatMessage[]` (cap 200) — the **Chat** tab | `utils/chatStore.js` | synced_items: `chat_history` |
+| `nook-weekly-reviews` | `WeeklyReview[]` | `App.jsx` / `AnalyticsDashboard` | synced_items: `weekly_reviews` |
+| `nook_custom_categories` | `{ [key]: { label, color } }` user-added task lists | `TaskList` | synced_items: `custom_categories` |
+| `nook_task_sort` | **raw string** — task sort preference | `TaskList` | synced_items: `task_sort` |
 
-### UI preferences (not "content")
+### Preferences / UI state
+
+| Key | Meaning | Sync |
+|---|---|---|
+| `nook-week-start` | **raw string**: first day of week | synced_items: `week_start` |
+| `nook-profile-name` / `-email` / `-avatar` | **raw strings**: local profile display (avatar is an emoji or a `data:` URL, synced only if ≤ 250 KB) | synced_items: `profile_*` |
+| `nook-notif-master` / `-morning` / `-morning-time` / `-streak` / `-pomo` | notification toggles + times (depend on this browser's notification permission) | **device** |
+| `nook-sidebar-open` | `true`/`false` — sidebar full vs icon rail | **device** |
+| `nook_journal_calview` / `nook_journal_calcollapsed` | journal calendar view mode / collapsed flag | **device** |
+| `nook-last-export` | timestamp of the last manual backup export | **device** |
+| `nook-visits` | visit counter (PWA install nudge) | **device** |
+| `nook-install-dismissed` | PWA install prompt dismissal | **device** |
+| `nook_ai_api_key` | the user's Gemini key, typed in Settings (**a credential**) | **device** — never synced |
+| `nook_ai_chat_history` | the hidden Gemini assistant panel's messages | **device** |
+
+> `nook-session-visited` is a **sessionStorage** key (per-tab-session), not localStorage.
+
+### Cross-device sync bookkeeping — `nook:` prefix (NOT `nook-`/`nook_`)
 
 | Key | Meaning |
 |---|---|
-| `nook-sidebar-open` | `true`/`false` — sidebar full vs icon rail. In `CROSS_TAB_IGNORE_KEYS`. |
-| `nook-week-start` | first day of week |
-| `nook-profile-name` / `-email` / `-avatar` | local profile display |
-| `nook-notif-master` / `-morning` / `-morning-time` / `-streak` / `-pomo` | notification toggles + times |
-| `nook-visits` / `nook-session-visited` | visit counting |
-| `nook-install-dismissed` | PWA install prompt dismissal |
+| `nook:sync:meta:<def>` | Per-slice sync state: last-synced stamp + content hash + dirty flag per item, tombstones |
+| `nook:sync:cursor` | Server-time cursor for the incremental pull |
+| `nook:sync:uid` | Which account this browser last synced as (a different one triggers the account-switch prompt) |
+| `nook:sync:applied-at` | Written just before the engine merges remote data, so other tabs know the writes that follow are a sync |
 
-### Sync / plumbing (all in `CROSS_TAB_IGNORE_KEYS`)
+Deliberately **not** `nook-`/`nook_`: those prefixes are swept by backup export,
+import's allowlist and the cross-tab banner, and a restored copy would carry another
+device's stale sync state. Which content keys are synced is defined in one place,
+`utils/syncDefs.js`; renaming a synced key or changing its codec (JSON vs raw string)
+breaks its sync — see [09-cross-device-sync.md](09-cross-device-sync.md).
+
+### Google sync / one-time-migration plumbing (all in `CROSS_TAB_IGNORE_KEYS`, all **device**)
 
 | Key | Meaning |
 |---|---|
 | `nook_google_tokens` | Google **Tasks** OAuth tokens `{accessToken, refreshToken, expiresAt}` |
 | `nook_pkce_verifier` | PKCE verifier during Tasks OAuth |
-| `nook_sync_enabled` | Tasks sync on/off |
-| `nook_sync_queue` | pending Tasks push ops |
-| `nook_deleted_tasks` | tombstones so pulls can't resurrect deleted tasks |
-| `nook_last_pull_sync` | timestamp of last Tasks pull |
+| `nook_sync_enabled` | Google Tasks sync on/off |
+| `nook_sync_queue` | pending Google Tasks push ops |
+| `nook_deleted_tasks` | tombstones so Google pulls can't resurrect deleted tasks |
+| `nook_last_pull_sync` | timestamp of last Google Tasks pull |
 | `nook_gcal_tokens` | Google **Calendar** OAuth tokens |
 | `nook_gcal_pkce_verifier` | PKCE verifier during Calendar OAuth |
 | `nook_gcal_enabled` | Calendar sync on/off |
@@ -73,6 +102,14 @@ rebuild the app, matching these keys and shapes gives you data compatibility.
 | `nook-notif-state` | notification scheduler bookkeeping |
 | `nook-analytics` | legacy pomodoro log (fallback source for `nook-pomo-log`) |
 | `nook_cleaned_w_duplicates` | one-time data-clean flag |
+| `nook_habits_migrated` | one-time copy of habit-trackers → `nook_habits` |
+| `nook_tasks_migrated`, `nook_habits_sync_migrated` | one-time local→Supabase seeding done on this device |
+
+### Legacy (nothing reads or writes it any more)
+
+| Key | Notes |
+|---|---|
+| `nook_vault` | The **Saved Logins** tab was removed. Entries saved earlier are left in place, in **plaintext**, are **not** synced, and a full backup still sweeps them up (`backup.js` takes every `nook_` key). Settings → Data Management shows an "Old saved logins" count with a **Delete** button while any remain; "Clear Local Data" also removes them. |
 
 ---
 
@@ -97,11 +134,11 @@ rebuild the app, matching these keys and shapes gives you data compatibility.
   completedAt: null,           // ISO string when completed
   timeLogged: 0,               // minutes logged via focus timer
   pomodorosCompleted: 0,
-  recurrence: null,            // e.g. 'daily'|'weekly'|... (LOCAL ONLY — not synced)
-  recurrenceDays: [],          // days-of-week for weekly recurrence
+  recurrence: null,            // 'daily'|'weekdays'|'weekly'|'monthly'|'custom' (not sent to Google)
+  recurrenceDays: [],          // days-of-week for 'custom' recurrence
   subtasks: [ { id, text, completed } ],   // optional
   createdAt: '<ISO>',
-  updatedAt: '<ISO>',          // drives last-write-wins conflict resolution
+  updatedAt: '<ISO>',          // drives last-write-wins (Supabase AND Google)
   // Google Tasks sync bookkeeping:
   googleTaskId: null,
   lastSyncedAt: null,
@@ -109,10 +146,12 @@ rebuild the app, matching these keys and shapes gives you data compatibility.
 }
 ```
 
-**Field ownership matters for sync** — see [04-google-sync.md](04-google-sync.md).
-On a pull, only an allowlist of fields is overwritten; everything else (category,
-priority, timeEstimate, timeLogged, pomodorosCompleted, recurrence, subtasks…)
-survives because Google Tasks has no concept of it.
+**Field ownership matters for Google sync** — see [04-google-sync.md](04-google-sync.md).
+On a Google pull, only an allowlist of fields is overwritten; everything else
+(category, priority, timeEstimate, timeLogged, pomodorosCompleted, recurrence,
+subtasks…) survives because Google Tasks has no concept of it. The Supabase `tasks`
+table carries the **whole** object (columns mirror the keys 1:1, quoted camelCase) plus
+a `deleted_at` tombstone.
 
 ### Habit (`nook_habits`) — `habitsStore.js`
 
@@ -128,6 +167,10 @@ survives because Google Tasks has no concept of it.
   reminderTime: null,          // 'HH:MM'
   completions: ['2026-07-19', '2026-07-20'],  // plain LOCAL date strings
   createdAt: '<ISO>',
+  updatedAt: '<ISO>',          // stamped on every write by App's handlers (drives LWW);
+                               // absent on a brand-new habit until its first write
+  archived: false,             // optional; exists in the Supabase `habits` schema and App's
+                               // activity-log wording, but no screen sets it today
 }
 ```
 
@@ -135,9 +178,12 @@ Streaks, best-streak, success-rate, the 7-day strip and 12-week (84-cell) heatma
 are all **derived** from `completions` in `habitsStore.js`. Non-scheduled days are
 skipped in streak math; today-not-yet-done does not break a streak.
 
-### Tracker (`nook-trackers`) — `trackers/trackerUtils.js`
+### Tracker (`nook-trackers`) — `trackers/trackerUtils.js` — *legacy UI*
 
-Four types share one base shape but differ in `config` and how `logs` are read:
+Trackers still exist in storage and still feed some Today-dashboard numbers
+(`isScheduledToday` / `isLoggedToday`), but **Reports no longer lists or manages
+them** (it is a read-only dashboard built from Habits, Tasks, Focus and Journal), and
+nothing currently calls the "add tracker" entry point. The data is retained.
 
 ```js
 {
@@ -158,19 +204,22 @@ Four types share one base shape but differ in `config` and how `logs` are read:
 | `project` | `{ milestones:[{id,done,doneAt}], targetDate }` | — | all milestones done |
 
 `logs` are kept date-sorted ascending and **capped at 2000 entries per tracker**
-(oldest dropped) in `saveTrackers`. `loadTrackers` de-dupes by id and by
-case-insensitive name.
+(oldest dropped) in `saveTrackers`. `loadTrackers` de-dupes by id, then by
+case-insensitive name — keeping the **oldest** (`createdAt`, then lowest `id`)
+duplicate, so every device drops the *same* one (see
+[08](08-conventions-and-gotchas.md): normalising a synced list on load is a delete).
 
 > **Habits exist twice on purpose.** A one-time `migrateFromTrackers()` (flagged by
 > `nook_habits_migrated`) copied `type:'habit'` trackers into `nook_habits` — it did
-> not delete them. So the same habit can legitimately appear in both the Habits tab
-> (`nook_habits`) and Reports (`nook-trackers`). The shapes differ (date-string
-> array vs `{date,value}` logs). Do not "dedupe" them.
+> not delete them. So the same habit can legitimately appear in both `nook_habits` and
+> `nook-trackers`. The shapes differ (date-string array vs `{date,value}` logs). Do not
+> "dedupe" them.
 
 ### Journal entry (`nook_journal_<YYYY-MM-DD>`)
 
 **One localStorage key per day.** Anything enumerating entries must scan keys by
-the `nook_journal_` prefix.
+the `nook_journal_` prefix — and match `^nook_journal_\d{4}-\d{2}-\d{2}$` exactly,
+because `nook_journal_icons`, `_calview` and `_calcollapsed` share the prefix.
 
 ```js
 { date: '2026-07-20', content: '<html>', createdAt: '<ISO>', updatedAt: '<ISO>' }
@@ -192,27 +241,31 @@ mood emoji separately. Export to `.docx` is handled by `utils/journalDocx.js`.
 }
 ```
 
+Created through `utils/notesStore.js` (`newNote`, `saveNote`) — shared with the voice
+command path so a note made by voice is identical to one made in the editor.
+
 ### Link (`nook_links`) — `LinksView`
 
-Bookmarks grouped by category; favicons are fetched from
-`https://www.google.com/s2/favicons?domain=<host>&sz=32`. Each link has an `id`,
-`url`, `title`, and a `category`.
-
-### Vault entry (`nook_vault`) — `VaultView`
-
 ```js
-{ id: genId(), name, username, password, url, notes?, createdAt: '<ISO>' }
+{ id, name, url, category, starred: false, createdAt: '<ISO>' }
 ```
 
-Stored **in plaintext localStorage** (this is a convenience vault, not a
-zero-knowledge password manager — see security note in
-[07-build-and-setup.md](07-build-and-setup.md)).
+Bookmarks grouped by category; favicons are fetched from
+`https://www.google.com/s2/favicons?domain=<host>&sz=32` (a 404 there for an unknown
+domain is harmless). `url` always has an `https://` prefix forced on save.
 
 ### Countdown (`nook_countdowns`) — `CountdownsView`
 
-Date countdowns with `category` (Personal/Work/Health/Learning/Travel/Other) and a
-`priority` (low/medium/high). Pinned ids live separately in
-`nook_countdown_pinned`.
+```js
+{ id, name, category,            // Personal|Work|Health|Learning|Travel|Other
+  priority,                      // low|medium|high
+  notes,                         // ≤ 500 chars
+  startDate, endDate,            // 'YYYY-MM-DD'
+  milestones: [ { id, name, targetDate } ],
+  completed: false, createdAt: '<ISO>' }
+```
+
+The pinned countdown's id lives separately in `nook_countdown_pinned` (a raw string).
 
 ### Calendar custom event (`nook-calendar-events`) — `CalendarView`
 
@@ -221,20 +274,19 @@ Date countdowns with `category` (Personal/Work/Health/Learning/Travel/Other) and
   isAllDay: bool, category: 'growth', notes: '' }
 ```
 
-The Calendar month grid merges **three sources**: tasks with a `dueDate`, these
-custom events, and live Google Calendar events (fetched, not stored — only their
-ids/fields are held transiently in state).
+The Calendar merges **three sources**: tasks with a `dueDate`, these custom events, and
+live Google Calendar events (fetched, not stored — only held transiently in state).
 
-### Goal (`nook_goals`) — `DailyGoalsView`
-
-Milestone- or manual-progress goals surfaced on the Today dashboard:
+### Goal (`nook_goals`) — `DailyGoalsView` — *read-only today*
 
 ```js
 { id, title, milestones: [ { id, done } ], manualProgress: 0, /* 0..100 when no milestones */
-  category, targetDate, createdAt }
+  category, targetDate, completed, createdAt }
 ```
 
-Progress = `milestones.length ? round(done/total*100) : manualProgress`.
+Progress = `milestones.length ? round(done/total*100) : manualProgress`. The Today
+dashboard shows the first 3 incomplete goals, but **no screen creates or edits goals**
+now; the key is read by `DailyGoalsView` and `aiContext.js` only.
 
 ### Intentions (`nook-intentions`) — `App.jsx`
 
@@ -242,18 +294,20 @@ Progress = `milestones.length ? round(done/total*100) : manualProgress`.
 {
   date: '2026-07-20',
   items: [ { id: '1', text: '', done: false }, /* seeded with 3 blank items */ ],
-  history: { '2026-07-19': {/* prior day's items */ } },
+  history: { '2026-07-19': true /* whether any item was done that day */ },
 }
 ```
 
-Rolled over to a new day *in place* at local midnight; the previous day is pushed
-into `history`.
+Rolled over to a new day *in place* at local midnight; the previous day's
+"anything done?" flag is pushed into `history`. (`DailyIntentions.jsx`, the editor for
+these, is no longer imported anywhere; Today only reads the counts.)
 
-### Pomodoro log entry (`nook-pomo-log`, legacy `nook-analytics`)
+### Pomodoro log (`nook-pomo-log`, legacy `nook-analytics`)
 
-One entry per completed focus session. Consumers (Stats, DailyGoalsView,
-AnalyticsDashboard) only ever read the last 7/30 days. Capped at
-`MAX_POMO_LOG = 2000`.
+A **flat array of ISO timestamp strings**, one per completed focus session, capped at
+`MAX_POMO_LOG = 2000`. Consumers (Stats, DailyGoalsView, AnalyticsDashboard) only read
+the last 7/30 days. The legacy `nook-analytics` map (`{ 'YYYY-MM-DD': { pomodoros } }`)
+is converted on first load if `nook-pomo-log` is absent.
 
 ### Settings (`nook-settings`) — `App.jsx`
 
@@ -262,15 +316,21 @@ AnalyticsDashboard) only ever read the last 7/30 days. Capped at
   autoSwitch: false, sound: true }
 ```
 
+### Weekly review (`nook-weekly-reviews`) — newest first
+
+```js
+{ date: '<ISO>', wentWell, wasHard, nextFocus, rating, focusHabits: [habitId, ≤3], focusTarget }
+```
+
 ### Activity log entry (`nook-activity-log`) — `utils/activityLog.js`
 
 ```js
 {
   id: `${Date.now()}-${rand}`,   // NOTE: distinct id format from genId()
-  module: 'tasks',               // tasks|calendar|habits|reports|journal…
+  module: 'tasks',               // tasks|calendar|habits|notes|links|countdowns|journal|focus|…
   entity_type: 'task',
   entity_id: '<id>',
-  action: 'created',             // created|updated|deleted|completed|archived|restored…
+  action: 'created',             // created|updated|deleted|completed|archived|restored|exported…
   title: 'Write docs',
   field_changes: [ { field, from, to } ] | null,  // via diffObjects()
   status: 'success',
@@ -280,22 +340,32 @@ AnalyticsDashboard) only ever read the last 7/30 days. Capped at
 
 Newest-first (`unshift`), capped at `MAX_ENTRIES = 2000`. Every write dispatches a
 `window` event `nook-activity-updated` so `ActivityLogView` live-reloads without
-polling. **The activity log is write-only from the app's perspective** — reads
-live entirely inside `ActivityLogView`; never route it through `App.jsx` state.
+polling. **The activity log is write-only from the app's perspective** — reads live
+entirely inside `ActivityLogView`; never route it through `App.jsx` state. Entries with
+`module: 'vault'` from the removed tab still render (label "Saved Logins", no link).
+
+### Chat message (`nook_chat_history`)
+
+```js
+{ id: genId(), role: 'user' | 'assistant', text, createdAt: '<ISO>' }
+```
+
+Oldest-dropped at 200. Only the last 20 turns are sent to Claude per request.
 
 ---
 
 ## ID generation — two deliberately different formats
 
 - `utils/id.js → genId()` = `Date.now().toString(36) + Math.random().toString(36).slice(2)`.
-  Used for tasks, vault, calendar events, trackers, etc.
+  Used for tasks, calendar events, trackers, links, countdowns, chat messages, etc.
+  (`NotesView` uses `Date.now().toString()`; habits use the same base36 recipe inline.)
 - `utils/activityLog.js` uses a **hyphenated** `${Date.now()}-${rand}` format on
   purpose. It is **not** consolidated with `genId()`.
 
 ## Date anchoring — two conventions (do not merge)
 
 - **`utils/date.js → todayStr()` / `localDateStr()`** produce the **local**
-  calendar date. Used almost everywhere (habits, trackers, journal, countdowns).
+  calendar date. Used almost everywhere (habits, journal, countdowns, pickers).
 - **`trackers/trackerUtils.js → todayStr()`** is **UTC-based**
   (`toISOString().split('T')[0]`). Intentionally distinct; different call sites
   depend on the difference.

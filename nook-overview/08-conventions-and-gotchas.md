@@ -6,6 +6,39 @@ bugs to fix — each is a real decision with a real cost to "cleaning up".
 
 ---
 
+## Read the code, not just the comments: things that are not what they look like
+
+- **`AuthGate` is not mounted — sign-in is optional and lives in Settings.**
+  `AuthGate.jsx`/`AuthPage.jsx` are complete, and several comments (and older docs) say the
+  app is login-gated — but since `6d76bfa` `main.jsx` renders `<App />` directly
+  ("Temporarily bypassing AuthGate since this is used only locally"). The way to get a
+  session is the **Sign in form in Settings → Connections** (`AccountSignIn.jsx`; a
+  successful sign-in reloads the page). Every session-dependent feature (cross-device sync,
+  tasks/habits sync, reminders, push, Drive backup, Google token exchange, voice/Chat) is
+  inert until someone has signed in there. `AuthGate`'s own header comment and `backup.js`'s
+  "export only" header are similarly stale. See
+  [01 § Auth status](01-architecture.md#auth-status--read-this-first). Don't assume a
+  feature is broken because its UI is missing; check whether it's hidden or gated. And
+  don't "simplify" by mounting the gate again — it turns the local-first app into a login wall.
+- **Hidden ≠ deleted.** Voice commands, the Chat tab and the Gemini assistant are fully
+  built but their entry points are commented out in `App.jsx`. Re-enable by uncommenting
+  those lines, not by rewriting them. Details in [10](10-ai-voice-chat.md).
+- **The keyboard-shortcuts modal is dead UI.** `ShortcutsModal` lists Space/R/1–4/N/A/S/?/D
+  but nothing opens it and those keys have no handlers. Only `Esc` and `Ctrl/Cmd+K` work.
+- **Reports no longer manages trackers.** It is a read-only dashboard; `nook-trackers` is
+  kept but has no screen (see [03](03-tabs-and-features.md)).
+
+## Selects, dates and times are themed components — never native
+
+`<select>`, `<input type="date">` and `<input type="time">` are banned: the browser's
+popups ignore the app theme. Use `Select` / `DateInput` / `TimeInput`
+([06](06-ui-and-styling.md)); `components/themedControls.test.js` fails if one appears.
+Popups must be portaled (`FloatingPopover`) or a modal / the Journal's side panel will
+clip them — and a portaled popup must be treated as "inside" by the thing that opened it
+(`data-nk-popover`).
+
+---
+
 ## Dates: three anchoring conventions, all intentional
 
 1. **Local-noon anchoring** — `new Date(ds + 'T12:00:00')` (no `Z`) is used almost
@@ -25,7 +58,7 @@ bugs to fix — each is a real decision with a real cost to "cleaning up".
 The `SK` map and the trackers store use **hyphens** (`nook-tasks`, `nook-settings`,
 `nook-theme`, `nook-pomo-log`, `nook-intentions`, `nook-trackers`,
 `nook-calendar-events`, `nook-activity-log`). Most feature modules use
-**underscores** (`nook_notes`, `nook_links`, `nook_vault`, `nook_countdowns`,
+**underscores** (`nook_notes`, `nook_links`, `nook_countdowns`,
 `nook_habits`, `nook_journal_*`). **Renaming either family orphans real user
 data.** Always grep the literal string before touching a key.
 
@@ -51,6 +84,11 @@ whatever the other tab wrote — worse than no banner, because it teaches the us
 the banner is safe to wave away. If a dismiss is ever reintroduced, it must
 re-sync the tab's in-memory state from disk (at minimum for the changed key), not
 just hide the UI. Don't "helpfully" re-add a `×`.
+
+The one exception is a **sync merge**: when another tab's sync engine writes a remote
+change into the shared localStorage (it announces it with `nook:sync:applied-at`
+first), the banner is suppressed (`isForeignSyncApply`) and this tab's views are told
+to refresh instead — that's a coordinated write, not a competing edit.
 
 ## Data-integrity files — refactor *around*, never *through*
 
@@ -80,11 +118,11 @@ It derives `todayStr` from the wall clock at render. The midnight rollover in
 until an unrelated prop changed. The `useSyncExternalStore` tick hides this while a
 timer runs, which is why it *looks* safe and isn't.
 
-## Chart.js is registered twice, harmlessly
+## Chart.js registers itself where it is used
 
-`AnalyticsDashboard` and `TrackerCharts.jsx` each call `ChartJS.register(...)`.
-`register()` is idempotent, so the overlap is harmless. Don't collapse them into a
-single shared registration point (that regression previously made
+`AnalyticsDashboard` calls `ChartJS.register(...)` for exactly the components it draws
+(the unused `TrackerCharts.jsx` does the same). `register()` is idempotent, so any overlap
+is harmless. Don't move registration to one shared point (that regression previously made
 `AnalyticsDashboard` work only by import-order luck).
 
 ## Timer tick is an external store, not App state
@@ -107,11 +145,42 @@ window event. `ActivityLogView` owns all reads (live-reload throttled to 1.5s).
 `nook_journal_<YYYY-MM-DD>` — anything enumerating entries must scan localStorage
 keys by the `nook_journal_` prefix, not read a single array.
 
+## Cross-device sync traps (full reference: [09](09-cross-device-sync.md))
+
+- **`sync.js` wraps `Storage.prototype.setItem/removeItem`.** Intentional: it is how
+  every writer is synced without opting in. Only `window.localStorage` is observed, the
+  original runs first, and it is installed only when auth is configured. Don't replace
+  it with per-call-site "also sync" calls — the next writer would silently not sync.
+- **A view holding a synced slice in state must use `useSyncApplied`.** Without it the
+  view goes stale and fights deletes of remote-added items (the engine restores them
+  until the view acknowledges a refresh). It also acks on mount.
+- **Absence is never a delete on the first pass or during an import.** A wiped or
+  restored localStorage must not tombstone the cloud copy. If you add a code path that
+  removes many keys at once, wrap it in `runUntrackedSync` like "Clear Local Data".
+- **Sync bookkeeping keys use `nook:`**, on purpose (see [02](02-data-model.md)). Don't
+  rename them to `nook_…` "for consistency": they'd start appearing in backups and
+  raising the cross-tab banner.
+- **Raw vs JSON codecs matter.** `nook-week-start` is a raw string, `nook-theme` is
+  JSON (`"dark"`). A def with the wrong codec can't parse the key and the engine
+  (correctly) skips it forever.
+- **Capped logs trim by dropping, not deleting.** Don't turn a trim into a tombstone.
+- **Normalising a synced list on load is a delete.** Anything that drops items when it
+  loads a synced slice and then re-saves the shorter list (the tracker name-dedupe) is read
+  as the user deleting those items — everywhere. The normalisation must be a pure function
+  of the data (`dedupeTrackers` keeps the oldest `createdAt`, then lowest id) so every device
+  drops the *same* ones; "keep the first" differs per device and would delete both copies.
+
 ## Deliberately-kept dead-ish code
 
-- **`trackers/insightsEngine.js` (~143 ln) is fully orphaned** — its only importer
-  (an unused `getDailyInsight` in `DailyGoalsView`) was removed. Left in place
-  because deleting a whole module is a product decision.
+None of these is imported by anything live; they are kept because deleting a whole module
+is a product decision:
+
+- `trackers/insightsEngine.js` (~143 ln) — its only importer was removed.
+- `components/AnalyticsModal.jsx`, `components/TrackerCharts.jsx`,
+  `components/DailyIntentions.jsx` — superseded by the Reports dashboard / Today cards.
+- `components/ShortcutsModal.jsx` — imported and mounted by `App.jsx` but never opened.
+- Root `style.css` — an old stylesheet nothing imports.
+- `AddTrackerModal.jsx` is imported and mounted, but nothing calls `openAddTracker`.
 - **`TaskList`'s `showTimePicker` state is permanently `false`** (only ever set to
   false; `timePickerRef` is attached to nothing). Removing it touches a `useState`
   and a `useEffect` dep array — out of scope for zero-behaviour passes.
@@ -119,7 +188,8 @@ keys by the `nook_journal_` prefix, not read a single array.
 ## Verification discipline
 
 - **`vite build` passing is not verification** — no TS, no lint; it will build a
-  render-time `ReferenceError`. Drive the real app.
+  render-time `ReferenceError`. Drive the real app, and run `npm test`
+  ([11](11-testing-and-verification.md)).
 - To run gate-free, point Vite's `envDir` at a dir with an empty `.env`. Don't edit
   the real `.env.local`.
 - **`landing/` is off-limits** for app changes.

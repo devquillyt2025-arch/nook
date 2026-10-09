@@ -1,11 +1,20 @@
 # 05 — Backend (Supabase)
 
-Nook has **no backend for your content** — tasks/notes/journal/habits/etc. live
-only in the browser. Supabase exists for the five things a client-only app can't
-do: fire a reminder while the tab is closed, keep an OAuth client secret off the
-client, deliver Web Push, and run scheduled Drive backups. Everything here is
-**optional**: with `VITE_SUPABASE_*` unset, `AuthGate` passes through and every
-helper below early-returns.
+Nook has **no server of its own for your content** — the UI always reads
+`localStorage`. Supabase does two jobs:
+
+1. **The things a client-only app can't do** — fire a reminder while the tab is closed,
+   keep an OAuth client secret (or an LLM API key) off the client, deliver Web Push,
+   run scheduled Drive backups.
+2. **Cross-device sync** of the user's content — typed `tasks` / `habits` tables, plus
+   one generic `synced_items` table for everything else (below, and in full in
+   [09-cross-device-sync.md](09-cross-device-sync.md)).
+
+Everything here is **optional**: with `VITE_SUPABASE_*` unset, every helper below
+early-returns. **And it only acts when a session exists.** The app is not login-gated
+(`AuthGate` is not mounted); a session is created by the optional sign-in form in
+Settings → Connections (`AccountSignIn.jsx`) — see
+[01-architecture.md § Auth status](01-architecture.md#auth-status--read-this-first).
 
 `utils/authClient.js`:
 ```js
@@ -16,10 +25,27 @@ export const isAuthConfigured = Boolean(
 
 ---
 
-## The 5 tables (migrations in `supabase/migrations/`)
+## Migrations (`supabase/migrations/`) — apply in order
+
+Numbers `0002` and `0005` were never used; the sequence has gaps, not missing files.
+
+| File | Adds |
+|---|---|
+| `0001_reminders.sql` | `reminders`, `push_subscriptions`, RLS, and the shared `set_updated_at()` trigger function |
+| `0003_schedule_reminders.sql` | `pg_cron` + `pg_net` schedule that calls `send-task-reminders` every minute |
+| `0004_notification_prefs.sql` | `notification_prefs` |
+| `0006_drive_backup.sql` | `drive_backup`, `backup_runs`, the Vault-backed token functions |
+| `0007_push_failure_tracking.sql` | `push_subscriptions.consecutive_failures` |
+| `0008_tasks.sql` | `tasks`, `upsert_tasks()`, Realtime publication |
+| `0009_habits.sql` | `habits`, `upsert_habits()`, Realtime publication |
+| `0010_upsert_reminders.sql` | `upsert_reminders()` — backup-wins bulk restore of reminders |
+| `0011_restore_and_null_updatedat_guard.sql` | NULL-safe LWW guard for tasks/habits (and a repair of frozen rows); `restore_tasks()` / `restore_habits()` |
+| `0012_synced_items.sql` | `synced_items`, `upsert_synced_items()`, Realtime publication — the generic cross-device sync store |
 
 All tables have **Row-Level Security** enabled; policies scope every row to
 `auth.uid() = user_id`, so client reads never need an explicit `user_id` filter.
+
+## The tables
 
 ### `reminders` — `0001_reminders.sql`
 When/where to fire a notification for a task or calendar event. **Not** a copy of
@@ -72,15 +98,59 @@ Audit trail: `id, user_id, ran_at, status ('success'|'error'), file_name, counts
 jsonb, error`. Users can read their own rows; only the edge function (service role)
 inserts.
 
+### `tasks` — `0008` (+ `0011`)
+The cross-device copy of `nook-tasks`. Task-field columns are **quoted camelCase so they
+match the JS object 1:1** (no hand-maintained field map that could silently drop
+`googleTaskId`, `lastSyncedAt`, `syncConflict` or `updatedAt`). PK `(user_id, id)` —
+client ids are `genId()` strings, not uuids, so scoping the key by user removes a
+cross-user collision class. `deleted_at` is a soft-delete tombstone. The app's
+`"updatedAt"` (drives last-write-wins) is **kept distinct** from the audit
+`created_at`/`updated_at` columns, which a trigger bumps on every server write and so
+must never be used for LWW. Writes go through `upsert_tasks(p_tasks jsonb)` — an atomic,
+LWW-guarded bulk upsert whose guard is NULL-safe since 0011 (a NULL `updatedAt` used to
+freeze a row so it could never be updated or deleted again). **Callers must send full
+rows**: the RPC maps each object with `jsonb_populate_record`, which nulls any absent
+column. `restore_tasks()` is the backup-wins variant used by import (clears tombstones;
+never deletes). In the `supabase_realtime` publication.
+
+### `habits` — `0009` (+ `0011`)
+Same design as `tasks`: `upsert_habits()`, `restore_habits()`, soft delete, quoted
+camelCase columns, `frequency` as `jsonb` (it is a string *or* a number array),
+`completions` merged by pure LWW (a completion ticked on another device inside the same
+offline window can be lost — a decided trade-off). Habits originally had no `updatedAt`;
+the client now stamps it on every write and the one-time migration backfills it.
+
+### `synced_items` — `0012_synced_items.sql`
+Generic per-item sync store for every tab that isn't tasks/habits/reminders.
+```
+user_id, collection text, id text, data jsonb,
+"updatedAt" timestamptz   -- client edit time; drives last-write-wins
+deleted_at timestamptz    -- soft-delete tombstone ({} data)
+created_at, updated_at    -- updated_at = DB clock (trigger); the pull cursor
+PK (user_id, collection, id)        RLS: auth.uid() = user_id
+```
+Writes go through `upsert_synced_items(p_items jsonb)` — atomic LWW
+(`ON CONFLICT … WHERE excluded."updatedAt" > s."updatedAt"`), returning per item
+`accepted` plus the server's row when a newer version already existed. Edit times are
+clamped to server `now() + 5 min` (a wrong device clock can't outrank honest edits). It
+also hard-deletes log rows beyond 2500 (`activity_log`, `pomo_log`) / 300
+(`chat_history`). The table is in the `supabase_realtime` publication. Full design:
+[09-cross-device-sync.md](09-cross-device-sync.md).
+
 ### Scheduling — `0003_schedule_reminders.sql`
 Uses `pg_cron` + `pg_net` to `POST` the `send-task-reminders` function **every
 minute**. The cron secret is stored via Supabase Vault (`vault.create_secret(...,
 'cron_secret')`), never in the migration file, and passed as an `X-Cron-Secret`
 header.
 
+> **Applying a migration is a manual step** (SQL editor, `supabase db push`, or the
+> Supabase MCP). Until `0012` is applied, cross-device sync pushes fail quietly and
+> Settings → Connections shows "Couldn't reach the server — N changes waiting"; the
+> app itself is unaffected.
+
 ---
 
-## The 4 edge functions (`supabase/functions/`, Deno)
+## The 6 edge functions (`supabase/functions/<name>/index.ts`, Deno)
 
 | Function | Trigger | JWT | Purpose |
 |---|---|---|---|
@@ -88,37 +158,52 @@ header.
 | `connect-drive` | Browser `functions.invoke` | **verify** | One-time Drive "offline access" consent exchange (`scope=drive.file`, `access_type=offline`). Stores the long-lived refresh token in Vault; it **never** returns to the client. |
 | `drive-backup` | Browser (client builds the backup from localStorage and POSTs it) | **verify** | Mints a fresh Drive access token from the Vault refresh token, ensures a "Nook Backups" folder, uploads `nook-backup-<date>.json`, prunes to newest 7, records a `backup_runs` row. Payload is forwarded to Drive, never persisted in Supabase. |
 | `send-task-reminders` | `pg_cron` via `pg_net`, every minute | **--no-verify-jwt** (gated by `X-Cron-Secret`) | Finds due unsent reminders, delivers via push (if a subscription exists) and/or email (if `email_reminders_enabled`), independently, marks them sent. Deletes expired push endpoints (404/410/401/403). Uses `web-push` and (optionally) Resend for email. |
+| `parse-voice-command` | Browser `functions.invoke` | **verify** | Turns a spoken transcript into one of three structured actions (`add_task` / `complete_task` / `add_note`) via a single Claude tool-use call. **Only parses** — never writes data. See [10](10-ai-voice-chat.md). |
+| `chat-with-claude` | Browser `functions.invoke` | **verify** | Plain conversation for the Chat tab. No tools, no side effects; last 20 turns, 4000 chars each. See [10](10-ai-voice-chat.md). |
 
 > **Why `google-oauth` and `connect-drive` differ:** both keep the client secret
 > server-side, but `google-oauth` *returns* tokens (Tasks/Calendar call
 > googleapis.com from the browser), whereas `connect-drive` *keeps* the refresh
 > token in Vault (only the server ever needs it for scheduled backups).
 
+The two Claude functions are deliberately separate: the narrow, confirm-gated action
+router never grows a second, less-audited entry point via chat.
+
 ---
 
-## Web Push (`public/sw.js` + `utils/pushSubscription.js`)
+## Web Push & the service worker (`public/sw.js` + `utils/pushSubscription.js`)
 
 - `index.html` registers `/sw.js` on load.
-- `utils/pushSubscription.js` subscribes the browser to Web Push using
-  `VITE_VAPID_PUBLIC_KEY`, and upserts the endpoint into `push_subscriptions`.
+- `sw.js` does two jobs: an **offline app-shell cache** (`nook-v1`, network-first with
+  cache fallback; only same-origin `200` responses are stored; precaches `/`,
+  `index.html`, the manifest and the two SVG icons) and **Web Push** (`push` shows the notification, `notificationclick`
+  focuses/opens a Nook window at the payload `url`, e.g. `/?reminder=task:<id>`, which
+  `App.jsx` parses to open that task on its Scheduling tab).
+- `utils/pushSubscription.js` subscribes the browser using `VITE_VAPID_PUBLIC_KEY` and
+  upserts the endpoint into `push_subscriptions`.
 - `send-task-reminders` signs pushes with the VAPID key pair (`VAPID_PUBLIC_KEY` /
-  `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`) and delivers them; `sw.js` shows the
-  notification and routes the click.
-- Local (non-push) notifications for morning/streak/pomodoro use the
-  Notifications API directly via `utils/notificationUtils.js` and are scheduled
-  from `App.jsx`.
+  `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`) and delivers them.
+- Local (non-push) notifications for morning/streak/pomodoro use the Notifications API
+  directly via `utils/notificationUtils.js` and are scheduled from `App.jsx`.
 
 ## Backup / export / import (`utils/backup.js`, `driveBackup.js`, `autoBackup.js`)
 
-- `buildBackup()` serialises the localStorage content slices into one JSON blob.
-  Manual **Export** downloads it; **Import** restores it.
-- **Reminders and notification prefs are intentionally NOT carried between devices
-  on import** — they're re-fetched from Supabase on export and are tied to
-  per-device/per-user rows.
+- `buildBackup()` serialises **every** `nook-`/`nook_` localStorage key except tokens/
+  PKCE/queues into one manifest — `{ schemaVersion: 1, app, exportedAt, userId, counts,
+  data: { local, remote: { reminders, notification_prefs } } }` — and `exportBackup()`
+  downloads it as a `.zip`. The `nook:` sync-bookkeeping keys and everything under the
+  `nook:` prefix are intentionally outside the sweep.
+- **Import** (`handleImportData` in `App.jsx`) writes the keys back, restores reminders
+  and — when signed in — tasks/habits through `restore_tasks`/`restore_habits`, then
+  reloads. With cross-device sync active the import is **additive**: it is merged into
+  the account (backup wins for items it contains) and never deletes anything on other
+  devices. A rollback export is downloaded automatically first.
+- **Reminders and notification prefs are re-fetched from Supabase on export** — they are
+  tied to per-user rows, not localStorage.
 - `autoBackup.js` enforces the *schedule* client-side (only the browser can read
-  localStorage) — `maybeRunAutoBackup()` runs on mount, and when a daily/weekly
-  backup is due it invokes the `drive-backup` function with a freshly built
-  payload.
+  localStorage) — `maybeRunAutoBackup()` runs on load and window focus, and when a
+  daily/weekly backup is due it invokes `drive-backup` with a freshly built payload.
+- A backup still contains any leftover `nook_vault` entries (plaintext) — see 02.
 
 ---
 
@@ -132,16 +217,18 @@ header.
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key. |
 | `VITE_GOOGLE_CLIENT_ID` | Public Google OAuth client id (Tasks/Calendar/Drive consent). |
 | `VITE_VAPID_PUBLIC_KEY` | Web Push public key. |
+| `VITE_GEMINI_API_KEY` | **Optional, and a known problem:** the hidden Gemini assistant reads it (falling back to `nook_ai_api_key` from Settings). Because it is `VITE_`-prefixed it is **shipped to every user** and the key is sent from the browser — which breaks the "no secret behind `VITE_`" rule. Prefer the Settings field (per-device, never synced) or move the call behind an edge function before enabling the assistant. |
 
-> A `VITE_`-prefixed secret is shipped to every user. The Google **client
-> secret**, VAPID **private** key, cron secret, and service role key are therefore
-> **only** ever set as edge-function / server env — never `VITE_`.
+> A `VITE_`-prefixed secret is shipped to every user. The Google **client secret**,
+> VAPID **private** key, cron secret, service role key and the Anthropic key are
+> therefore **only** ever set as edge-function env — never `VITE_`.
 
-### Edge functions / server (Deno env, never shipped to client)
+### Edge functions (Deno env, never shipped to client)
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `VAPID_PUBLIC_KEY`,
-`VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`, `RESEND_API_KEY` (optional),
+`VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`, `ANTHROPIC_API_KEY`
+(`parse-voice-command`, `chat-with-claude`), `RESEND_API_KEY` (optional),
 `RESEND_FROM` (optional), `SITE_URL`.
 
 ---
@@ -152,4 +239,12 @@ header.
 (set by the marketing site after login), establishes the Supabase session, then
 scrubs the hash. Those custom hash keys deliberately avoid Supabase's native
 OAuth/magic-link hash format (handled by `detectSessionInUrl`). Don't rename them
-on one side only.
+on one side only. **Dead while `AuthGate` is unmounted** (it is what consumes the hash; the
+Settings sign-in form does not).
+
+## Advisor notes (live project, last checked after migration 0012)
+
+Supabase's security advisor reported nothing about `synced_items`. Two pre-existing
+warnings: `public.set_updated_at` (from `0001`) has a mutable `search_path`, and
+**leaked-password protection is disabled** in Auth settings (a dashboard toggle worth
+enabling for email/password accounts).

@@ -1,10 +1,16 @@
 # 04 — Google Sync (Tasks & Calendar)
 
 Two independent integrations. **Tasks sync is the single most intricate file in
-the repo** (`utils/googleTasksSync.js`, ~880 lines). Calendar
-(`utils/googleCalendarSync.js`, ~320 lines) is smaller and one-directional-ish.
+the repo** (`utils/googleTasksSync.js`, ~1000 lines). Calendar
+(`utils/googleCalendarSync.js`, ~330 lines) is smaller and one-directional-ish.
 Both are two-way for the entities they own; **only tasks and calendar events are
-synced — habits, goals, journal, notes, and trackers are never touched.**
+synced *to Google* — habits, goals, journal, notes, and trackers are never sent there.**
+
+> **Not to be confused with cross-device sync.** Google sync links Nook to *Google's*
+> apps. Moving your Nook data between *your own devices* is a separate system: tasks go
+> through `utils/tasksService.js` (Supabase `tasks` table) and everything else through
+> the `synced_items` engine ([09](09-cross-device-sync.md)). The two task systems run
+> side by side — see [Coexisting with the Supabase task sync](#coexisting-with-the-supabase-task-sync).
 
 > These are **data-integrity files**. Treat the conflict-resolution / push-pull /
 > auth logic as read-only unless the task is explicitly to change that behaviour,
@@ -100,11 +106,31 @@ second.
 
 ### Known limitations (documented in-file — do not "fix" accidentally)
 
-- **Single-device.** All sync state is localStorage; opening Nook elsewhere won't
-  see prior sync state and can duplicate.
+- **The Google *connection* is per-device.** Tokens, the push queue, the delete
+  tombstones and the last-pull time are all localStorage (and deliberately never
+  synced or backed up). Your *tasks* now reach other devices through Supabase, but a
+  device you haven't connected to Google won't push or pull Google changes, and
+  connecting a second device to the same Google account can still produce
+  duplicates on first pull (the in-file header says so).
 - **Recurrence is local-only.** The Google Tasks REST API has no recurrence field;
   any RRULE is silently dropped. Nook creates the next occurrence itself.
 - **Supabase auth required** for the OAuth token exchange/refresh (see Auth above).
+
+### Coexisting with the Supabase task sync
+
+Both systems read and write the **same local `nook-tasks` array** and reconcile with
+last-write-wins on the app-level `updatedAt`. They are otherwise independent (see the
+header of `utils/tasksService.js`), with exactly **one** intentional coupling:
+`googleTasksSync` imports `softDeleteTask`. A task deleted on the Google side used to be
+filtered out of local state with no Supabase tombstone, so the Supabase row stayed live
+and the next hydrate re-adopted it as a remote-only task forever. A delete has to be
+agreed by both systems or neither owns it. Related fixes in the history:
+`e846c71` (Google pull minted duplicate tasks on every pull), `11b3d6f` (the pull merge
+must be able to *express* a deletion), `ec746fc` (tombstone gap in Google sync + backup
+restore, null-`updatedAt` freeze).
+
+When you change anything here, check both layers still agree on `updatedAt`: it is the
+only clock either one trusts.
 
 ---
 
