@@ -5,6 +5,7 @@ import { genId } from '../utils/id';
 import { isAuthConfigured } from '../utils/authClient';
 import { useSpeechToText, isSpeechRecognitionSupported } from '../utils/useSpeechToText';
 import { useOnlineStatus } from '../utils/useOnlineStatus';
+import { useSyncApplied } from '../utils/useSyncApplied';
 
 const speechSynthesisSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
@@ -18,6 +19,11 @@ export default memo(function ChatView() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [muted, setMuted] = useState(false);
+  // Another device's messages. Not while a reply is in flight: the send flow owns `messages` until it lands.
+  useSyncApplied(['chat_history'], () => {
+    if (sending) return false;               // not refreshed → the engine keeps guarding what it merged in
+    setMessages(loadChatHistory());
+  });
   const online = useOnlineStatus();
   const listRef = useRef(null);
   const inputRef = useRef(null);
