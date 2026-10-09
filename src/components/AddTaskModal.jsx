@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import DateInput from './DateInput';
 import { motion } from 'framer-motion';
 import { CAT_META } from '../utils/categoryMeta';
 import { PRI_META } from '../utils/priorityMeta';
@@ -134,7 +135,7 @@ export default function AddTaskModal({ onAdd, onEdit, onClose, editTask, existin
             </div>
             <div className="form-grp">
               <label>Due Date</label>
-              <input type="date" className="form-inp" value={form.dueDate}
+              <DateInput className="form-inp" value={form.dueDate}
                 onChange={e => set('dueDate', e.target.value)} />
             </div>
           </div>

@@ -8,6 +8,7 @@ import Select from './Select';
 import ReminderField from './ReminderField';
 import CalendarDatePicker from './CalendarDatePicker';
 import { syncTaskField } from '../utils/googleTasksSync';
+import { useSyncApplied } from '../utils/useSyncApplied';
 
 
 const PRI_ORDER = { high: 0, medium: 1, low: 2, none: 3 };
@@ -612,6 +613,12 @@ function TaskList({ tasks, activeTaskId, timerRunning, onSelect, onToggle, onDel
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [showCompleted,   setShowCompleted]   = useState(false);
   const [sortBy,          setSortBy]          = useState(() => localStorage.getItem(LS_SORT_KEY) || 'created');
+  useSyncApplied(['task_sort', 'custom_categories'], (names) => {   // another device's change, merged into storage
+    if (names.includes('task_sort')) setSortBy(localStorage.getItem(LS_SORT_KEY) || 'created');
+    if (names.includes('custom_categories')) {
+      try { const saved = JSON.parse(localStorage.getItem('nook_custom_categories') || '{}'); Object.assign(CAT_META, saved); setCustomCats(saved); } catch {}
+    }
+  });
   const [sortOpen,        setSortOpen]        = useState(false);
   const [query,           setQuery]           = useState('');
   const [detailTask,      setDetailTask]      = useState(null); // original snapshot
@@ -1572,19 +1579,17 @@ function TaskList({ tasks, activeTaskId, timerRunning, onSelect, onToggle, onDel
                   <div className="tdp-field">
                     <label className="tdp-label">Repeat</label>
                     <div className="tdp-select-wrap">
-                      <select
+                      <Select
                         className="tdp-native-select"
+                        style={{ padding: '9px 12px 9px 14px', fontSize: '0.88rem', fontWeight: 500 }}
                         value={local.recurrence ?? 'none'}
                         onChange={e => saveField('recurrence', e.target.value === 'none' ? null : e.target.value)}
-                      >
-                        <option value="none">None</option>
-                        <option value="daily">Daily</option>
-                        <option value="weekdays">Weekdays</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="custom">Custom</option>
-                      </select>
-                      <svg className="tdp-select-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                        options={[
+                          { value: 'none', label: 'None' }, { value: 'daily', label: 'Daily' },
+                          { value: 'weekdays', label: 'Weekdays' }, { value: 'weekly', label: 'Weekly' },
+                          { value: 'monthly', label: 'Monthly' }, { value: 'custom', label: 'Custom' },
+                        ]}
+                      />
                     </div>
                     {local.recurrence === 'custom' && (
                       <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
