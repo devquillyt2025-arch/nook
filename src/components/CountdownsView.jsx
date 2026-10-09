@@ -1,7 +1,9 @@
 import { memo,  useState, useEffect, useRef, useMemo } from 'react';
+import DateInput from './DateInput';
 import Select from './Select';
 import { genId } from '../trackers/trackerUtils';
 import { logActivity, diffObjects } from '../utils/activityLog';
+import { useSyncApplied } from '../utils/useSyncApplied';
 import { localDateStr } from '../utils/date';
 
 // ─── Storage ───────────────────────────────────────────────────────
@@ -50,12 +52,6 @@ function daysBetween(a, b) {
 }
 function fmtCdDate(ds) {
   return new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-function openPicker(ref) {
-  const el = ref.current;
-  if (!el) return;
-  try { el.showPicker(); }
-  catch { el.focus(); }
 }
 
 // ─── Derived countdown state ────────────────────────────────────────
@@ -118,6 +114,10 @@ function makeCountdown(data) {
 export default memo(function CountdownsView() {
   const [countdowns, setCountdowns] = useState(loadCountdowns);
   const [pinnedId,   setPinnedId]   = useState(loadPinned);
+  useSyncApplied(['countdowns', 'countdown_pinned'], (names) => {   // another device's change, merged into storage
+    if (names.includes('countdowns')) setCountdowns(loadCountdowns());
+    if (names.includes('countdown_pinned')) setPinnedId(loadPinned());
+  });
   const [showModal,  setShowModal]  = useState(false);
   const [editingCd,  setEditingCd]  = useState(null);
 
@@ -434,9 +434,6 @@ function CountdownRow({ cd, pinned, onEdit, onDelete, onToggleComplete, onToggle
 // ─── Add / Edit modal ──────────────────────────────────────────────
 function CountdownModal({ onSave, onClose, editCd = null, onDelete }) {
   const isEdit = !!editCd;
-  const startRef = useRef(null);
-  const endRef = useRef(null);
-  const msDateRefs = useRef({});
   const submittingRef = useRef(false); // guards a same-frame double-submit (double-Enter/double-click)
 
   const [form, setForm] = useState(() => isEdit ? {
@@ -586,23 +583,13 @@ function CountdownModal({ onSave, onClose, editCd = null, onDelete }) {
           <div className="cdp-field-row">
             <div className="cdp-field">
               <label className="cdp-field-label">Start Date</label>
-              <div className="tdp-date-wrap">
-                <div className="cdp-date-display" onClick={() => openPicker(startRef)}>
-                  <CdIcoCalendar />
-                  <span>{form.startDate ? fmtCdDate(form.startDate) : 'Choose a date'}</span>
-                </div>
-                <input ref={startRef} type="date" className="tdp-date-hidden" value={form.startDate} onChange={e => setF('startDate', e.target.value)} />
-              </div>
+              <DateInput className="cdp-date-display" iconStart format={fmtCdDate} placeholder="Choose a date"
+                  value={form.startDate} onChange={e => setF('startDate', e.target.value)} />
             </div>
             <div className="cdp-field">
               <label className="cdp-field-label">End Date</label>
-              <div className="tdp-date-wrap">
-                <div className="cdp-date-display" onClick={() => openPicker(endRef)}>
-                  <CdIcoCalendar />
-                  <span>{form.endDate ? fmtCdDate(form.endDate) : 'Choose a date'}</span>
-                </div>
-                <input ref={endRef} type="date" className="tdp-date-hidden" value={form.endDate} onChange={e => setF('endDate', e.target.value)} />
-              </div>
+              <DateInput className="cdp-date-display" iconStart format={fmtCdDate} placeholder="Choose a date"
+                  value={form.endDate} onChange={e => setF('endDate', e.target.value)} />
             </div>
           </div>
 
@@ -619,19 +606,8 @@ function CountdownModal({ onSave, onClose, editCd = null, onDelete }) {
                       placeholder="Milestone name…"
                     />
                     <div className="tdp-date-wrap cdp-ms-edit-date">
-                      <div
-                        className="cdp-date-display"
-                        onClick={() => openPicker({ current: msDateRefs.current[m.id] })}
-                      >
-                        <span>{m.targetDate ? fmtCdDate(m.targetDate) : 'Date'}</span>
-                      </div>
-                      <input
-                        ref={el => { msDateRefs.current[m.id] = el; }}
-                        type="date"
-                        className="tdp-date-hidden"
-                        value={m.targetDate}
-                        onChange={e => updateMilestone(m.id, 'targetDate', e.target.value)}
-                      />
+                      <DateInput className="cdp-date-display" icon={false} format={fmtCdDate} placeholder="Date"
+                        value={m.targetDate} onChange={e => updateMilestone(m.id, 'targetDate', e.target.value)} />
                     </div>
                     <button type="button" className="cdp-ms-del" onClick={() => removeMilestone(m.id)} aria-label="Remove milestone"><CdIcoX /></button>
                   </div>
