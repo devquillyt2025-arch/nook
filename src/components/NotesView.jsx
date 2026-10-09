@@ -1,6 +1,7 @@
 import { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
+import { useSyncApplied } from '../utils/useSyncApplied';
 import { NOTES_STORAGE_KEY, loadNotes, newNote, saveNote as storeSaveNote } from '../utils/notesStore';
 import Select from './Select';
 import ErrorBoundary from './ErrorBoundary';
@@ -490,6 +491,8 @@ export function NoteCard({ note, onOpen, onPin, onDelete, onTagClick, onColorSel
 export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '' }) {
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [notes,       setNotes]       = useState(loadNotes);
+  // Another device edited notes: re-read what the sync engine merged into storage.
+  useSyncApplied(['notes'], () => setNotes(loadNotes()));
   const [sortOrder,   setSortOrder]   = useState('updated');
   const [activeTag,   setActiveTag]   = useState(null);
   const [activeColor, setActiveColor] = useState(null);
