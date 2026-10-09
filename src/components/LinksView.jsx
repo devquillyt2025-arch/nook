@@ -1,6 +1,8 @@
 import { memo, useState, useMemo, useRef, useEffect } from 'react';
+import Select from './Select';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
+import { useSyncApplied } from '../utils/useSyncApplied';
 import { genId } from '../utils/id';
 
 const STORAGE_KEY = 'nook_links';
@@ -354,12 +356,10 @@ function LinksModal({ entry, existingCats, onSave, onClose }) {
               </div>
             ) : (
               <div style={{ display: 'flex', gap: 8 }}>
-                <select value={catSel} onChange={e => setCatSel(e.target.value)}
-                  style={{ ...inp.style, flex: 1, appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: 36 }}
-                  onFocus={inp.onFocus} onBlur={inp.onBlur}>
-                  <option value="">— None —</option>
-                  {allCats.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <Select value={catSel} onChange={e => setCatSel(e.target.value)}
+                  options={[{ value: '', label: '— None —' }, ...allCats.map(c => ({ value: c, label: c }))]}
+                  placeholder="— None —"
+                  style={{ ...inp.style, flex: 1 }} />
                 <button type="button" onClick={() => { setAddingCat(true); setCatSel(''); }}
                   aria-label="Add new category"
                   style={{ width: 40, flexShrink: 0, background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 700, transition: 'background .12s' }}
@@ -390,6 +390,7 @@ function LinksModal({ entry, existingCats, onSave, onClose }) {
 // ── Main LinksView ────────────────────────────────────────────────
 export default memo(function LinksView() {
   const [links,     setLinks]     = useState(load);
+  useSyncApplied(['links'], () => setLinks(load()));   // another device's change, merged into storage
   const [query,     setQuery]     = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [modal,     setModal]     = useState(null); // null | 'add' | entry
