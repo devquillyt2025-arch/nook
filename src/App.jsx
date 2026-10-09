@@ -37,6 +37,8 @@ import { sendNotification } from './utils/notificationUtils';
 import { getSecsForMode } from './utils/timerUtils';
 import { setTickSeconds, getTickSeconds } from './utils/timerTickStore';
 import { logActivity, diffObjects } from './utils/activityLog';
+import { startSync, isForeignSyncApply, runAdditiveSync, runUntrackedSync, clearLocalSyncState, settleSync } from './utils/sync';
+import { useSyncApplied } from './utils/useSyncApplied';
 import { clearReminder, renameReminder, restoreReminders } from './utils/reminders';
 import { localDateStr, todayStr } from './utils/date';
 import { genId } from './utils/id';
@@ -382,16 +384,22 @@ export default function App() {
     const keyCount = Object.keys(localMap).filter(k => ALLOWED_PREFIX.test(k) && !BLOCKED_KEYS.has(k)).length;
     if (!confirm(`This will replace ${keyCount} data set(s) with the backup. Continue?`)) return;
 
-    for (const [key, value] of Object.entries(localMap)) {
-      if (!ALLOWED_PREFIX.test(key)) continue;      // reject non-nook keys
-      if (BLOCKED_KEYS.has(key)) continue;           // never restore tokens/queues
-      try {
-        // value is already parsed; re-stringify for localStorage
-        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-      } catch (err) {
-        console.error(`[Import] failed to write ${key}:`, err);
+    // Cross-device sync is merged, never destructive: while the backup is being
+    // written, nothing it removes counts as a deletion (see runAdditive). Without
+    // this, importing an older backup would delete everything newer from every
+    // signed-in device.
+    await runAdditiveSync(async () => {
+      for (const [key, value] of Object.entries(localMap)) {
+        if (!ALLOWED_PREFIX.test(key)) continue;      // reject non-nook keys
+        if (BLOCKED_KEYS.has(key)) continue;           // never restore tokens/queues
+        try {
+          // value is already parsed; re-stringify for localStorage
+          localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+        } catch (err) {
+          console.error(`[Import] failed to write ${key}:`, err);
+        }
       }
-    }
+    });
     
     // ── Cloud-backed slices ────────────────────────────────────────────
     // Reminders, tasks and habits do NOT live in localStorage alone, so the
@@ -449,6 +457,10 @@ export default function App() {
       await runRestore('task',  Array.isArray(localMap['nook-tasks'])  ? localMap['nook-tasks']  : [], restoreTasks);
       await runRestore('habit', Array.isArray(localMap['nook_habits']) ? localMap['nook_habits'] : [], restoreHabits);
     }
+    // Everything the import wrote must be diffed and pushed BEFORE the reload
+    // below — a reload abandons in-flight requests (same reason as the restores).
+    await settleSync();
+
 
     // Copy is deliberately specific, because the two behaviours genuinely
     // differ and the previous single sentence ("a restore brings back
@@ -458,8 +470,8 @@ export default function App() {
       `Backup imported.\n\n` +
       (notes.length ? `${notes.join('\n')}\n\n` : '') +
       (cloudSync
-        ? `Notes, journal, links and other on-device data were REPLACED with the backup's copy — anything created since the backup was taken is gone.\n\n` +
-          `Tasks, habits and reminders were MERGED: everything in the backup is back, including items you deleted since, and items created since were kept.`
+        ? `Everything in the backup is back, including items you deleted since, and items created since were kept.\n\n` +
+          `Tasks, habits, reminders, notes, journal, links and your other synced data were MERGED with your account, so this applies on your other devices too.`
         : `Your data was REPLACED with the backup's copy — anything created since the backup was taken is gone.`)
     );
 
@@ -472,8 +484,8 @@ export default function App() {
     // sync back down on the next load. Promising "ALL data" was misleading.
     if (confirm(
       "Clear all data stored in this browser?\n\n" +
-      "This deletes everything Nook keeps on this device — tasks, habits, journal, notes, links, countdowns and saved logins — and cannot be undone.\n\n" +
-      "It does NOT delete your synced copies in the cloud: if Google or account sync is on, tasks and habits will sync back down on the next load. Reminders are also kept."
+      "This deletes everything Nook keeps on this device — tasks, habits, journal, notes, links and countdowns — and cannot be undone.\n\n" +
+      "It does NOT delete your synced copies in the cloud: if you are signed in, your tasks, habits, notes, journal and other synced data will sync back down on the next load. Reminders are also kept."
     )) {
       // Nook keys use BOTH prefixes: 'nook-' (tasks, settings, calendar…) and
       // 'nook_' (notes, links, countdowns, journal, goals, Google tokens/sync).
@@ -484,8 +496,11 @@ export default function App() {
         const k = localStorage.key(i);
         if (k && (k.startsWith('nook-') || k.startsWith('nook_'))) keys.push(k);
       }
-      keys.forEach(k => localStorage.removeItem(k));
-      window.location.reload();
+      // Wiping THIS device must not be read as the user deleting everything in
+      // their account: the removals are not observed, and the sync bookkeeping
+      // goes with them so the next load pulls the cloud copy back down.
+      runUntrackedSync(() => { keys.forEach(k => localStorage.removeItem(k)); clearLocalSyncState(); })
+        .finally(() => window.location.reload());
     }
   }, []);
 
@@ -850,6 +865,10 @@ export default function App() {
   // user-facing data keys should prompt a reload.
   useEffect(() => {
     const onStorage = (e) => {
+      // Another tab's sync engine merged a remote change into this shared
+      // localStorage. That's not a competing edit, and sync.js already told this
+      // tab's views to refresh — a "reload" prompt would be wrong and noisy.
+      if (isForeignSyncApply()) return;
       if (!e.key || !/^nook[-_]/.test(e.key) || CROSS_TAB_IGNORE_KEYS.has(e.key)) return;
       setCrossTabChanged(true);
     };
@@ -1460,6 +1479,29 @@ export default function App() {
     return `${name.toLowerCase().replace(/\s+/g, '')}@gmail.com`;
   });
   const [profileAvatar, setProfileAvatar] = useState(() => localStorage.getItem('nook-profile-avatar') || '😎');
+  // ── Cross-device sync (everything except tasks/habits/reminders) ──
+  // utils/sync.js watches localStorage writes and mirrors them to Supabase
+  // (synced_items), and merges other devices' changes back INTO localStorage.
+  // This component only has to (1) start it and (2) re-read the slices it holds
+  // in React state when a remote change lands — each tab's view does the same
+  // for its own slice via useSyncApplied. No-op without a signed-in session.
+  useEffect(() => { startSync(); }, []);
+  useSyncApplied(
+    ['pomo_settings', 'pomo_log', 'intentions', 'trackers', 'theme', 'profile_name', 'profile_email', 'profile_avatar'],
+    (names) => {
+      if (names.includes('pomo_settings')) setSettings(loadSettings());
+      if (names.includes('pomo_log'))      setPomodoroLog(loadPomoLog());
+      if (names.includes('intentions'))    setIntentions(loadIntentions());   // also rolls a stale day over
+      if (names.includes('trackers'))      setTrackers(loadTrackers());
+      if (names.includes('theme')) {
+        try { const t = JSON.parse(localStorage.getItem(SK.theme)); if (t === 'dark' || t === 'light') setTheme(t); } catch {}
+      }
+      if (names.includes('profile_name'))   setProfileName(localStorage.getItem('nook-profile-name') || 'Productivity User');
+      if (names.includes('profile_email'))  { const e = localStorage.getItem('nook-profile-email'); if (e) setProfileEmail(e); }
+      if (names.includes('profile_avatar')) setProfileAvatar(localStorage.getItem('nook-profile-avatar') || '😎');
+    },
+  );
+
 
   // Nav badge counts (derived — no effect needed, no notification side-effect).
   // Previously this block contained a per-edit "Daily Summary" notification that
