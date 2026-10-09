@@ -66,9 +66,9 @@ createRoot(document.getElementById('root')).render(
 Plus `window.addEventListener('error' / 'unhandledrejection', …)` loggers so non-React
 exceptions don't vanish, and `import './index.css'`.
 
-> **`AuthGate` is not in this tree today** (bypassed since `6d76bfa`); sign-in is optional
-> and lives in Settings → Connections (`AccountSignIn`). To require sign-in instead, wrap the
-> app: `<AuthGate><App /></AuthGate>`. See
+> **The app is wrapped in `<AuthGate>`** (`main.jsx` renders `<AuthGate><App /></AuthGate>`):
+> with `VITE_SUPABASE_*` set nothing shows until someone signs in; without them it passes
+> straight through. See
 > [01-architecture.md § Auth status](01-architecture.md#auth-status--read-this-first).
 
 ## 4. Build the data layer first
@@ -94,9 +94,9 @@ npm run dev      # http://localhost:5173
 
 > **Gate-free verification** — if your `.env.local` has `VITE_SUPABASE_*`, run with an
 > `envDir` pointed at a directory holding an *empty* `.env` so those vars are absent.
-> Do not edit or move the real `.env.local`. (With today's `main.jsx` there is no login
-> gate to bypass, but the sync layer, Supabase services and the Chat/voice entry points
-> all key off `isAuthConfigured`, so an empty env is still how you get "pure local".)
+> Do not edit or move the real `.env.local`. (With those vars absent `AuthGate` passes
+> straight through, and the sync layer, Supabase services and the Chat/voice entry points all
+> key off `isAuthConfigured`, so an empty env is how you get "pure local".)
 
 ## 6. Add the cloud layer (optional)
 
@@ -132,10 +132,12 @@ See [05-backend.md](05-backend.md) for schema and functions. Steps:
 5. Store the cron secret in Vault and enable the pg_cron schedule (`0003`).
 6. Generate a VAPID key pair; the public half is `VITE_VAPID_PUBLIC_KEY`, the private half
    is the function's `VAPID_PRIVATE_KEY`.
-7. **Sign in** from Settings → Connections (the form appears once `VITE_SUPABASE_*` is set;
-   see 01 § Auth status). Until a session exists none of the above activates. The account
-   must already exist or be created from that form; Supabase Auth → Providers must have Google
-   enabled for "Continue with Google" to work, and there is no in-app password reset.
+7. **Sign in** on the login page (it appears once `VITE_SUPABASE_*` is set; see 01 § Auth
+   status). Until a session exists none of the above activates. Create the account there or in
+   the Supabase dashboard; Supabase Auth → Providers must have Google enabled (and
+   `https://<your-site>/` in the redirect allow-list) for the "google" button to work. The
+   "forgot?" link emails a reset link, but nothing in the app then asks for a new password —
+   reset from the dashboard instead.
 
 ## 7. Build & deploy
 

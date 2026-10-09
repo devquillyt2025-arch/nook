@@ -93,13 +93,13 @@ scratch, not part of the app.) A browser pointed at that port is a pure-local No
 
 ### Testing anything that needs a session (sync, tasks/habits cloud, voice/chat)
 
-Sign-in is optional and lives in Settings → Connections
-([01 § Auth status](01-architecture.md#auth-status--read-this-first)), so a test either drives
-that form or **seeds a session**. supabase-js persists it in `localStorage` under
+With Supabase configured the app is behind the login page (`AuthGate`,
+[01 § Auth status](01-architecture.md#auth-status--read-this-first)), so a test either drives
+that page or **seeds a session**. supabase-js persists it in `localStorage` under
 `sb-<first label of the Supabase host>-auth-token` (for a mock at `http://localhost:54399`
 that is `sb-localhost-auth-token`); the harness writes that key before the app loads —
 Playwright's `context.addInitScript` does it cleanly. Seeding is much faster for sync tests;
-drive the real form (below) when you change `AccountSignIn` or the Account row.
+drive the real login page (below) when you change `AuthGate`, `AuthPage` or sign-out.
 
 For cross-device sync, run a **mock Supabase** and point the app at it with a second `envDir`
 whose `.env` sets `VITE_SUPABASE_URL=http://localhost:<port>` and a dummy
@@ -135,18 +135,29 @@ or any view's `useSyncApplied`:
    banner, while a sibling tab of the same browser shows no "data changed" banner either.
 7. Zero `pageerror` / unexpected `console.error` across every tab, including the 13-tab smoke
    (visit each `TAB_IDS` entry; confirm it renders).
-8. **The sign-in form itself** (`AccountSignIn`, Settings → Connections), signed out with
-   auth configured: empty submit makes no request; a wrong password shows "Wrong email or
-   password." and leaves the form usable with no session stored; the right one reloads and sync
-   goes live (`nook:sync:uid` appears, a later edit reaches the server); **Log Out** returns to
-   the form; the create-account toggle rejects a short password, shows the inbox notice when
-   confirmation is required, and signs in at once when it isn't; **Continue with Google**
-   requests `/auth/v1/authorize?provider=google`; a signed-in user never sees the form flash
-   (observe the DOM, don't just assert the end state); no horizontal overflow and no clipped
-   control at phone width in both themes; with `VITE_SUPABASE_*` unset there is no form and the
-   Account row says "Local only". This needs a mock whose `/auth/v1/token` can reject a password
-   and that answers `/auth/v1/signup`. The Google leg is only verified up to the redirect — it
-   has not been exercised against a real Google/Supabase provider.
+8. **The login wall** (`AuthGate` + `AuthPage`), with auth configured:
+   - **Signed out** you see the login page and *none* of the app (no nav, no Settings); a wrong
+     password shows an error and stays put with no session stored; an empty submit makes no
+     request; create-account shows the inbox notice when confirmation is needed; **google**
+     requests `/auth/v1/authorize?provider=google`.
+   - **Sign in** opens the app without a manual reload, local data is there, sync starts
+     (`nook:sync:uid` appears).
+   - **Sign out** (Settings → Account card, and the bottom **Log Out**, also with the
+     `/auth/v1/logout` request aborted) removes the session and **lands on the login page**;
+     local data is still on the device; a reload stays on the login page; signing back in
+     restores the same data and shows no stray toast.
+   - **Returning user** goes straight to the app and the login page never flashes (watch the DOM
+     with a `MutationObserver`; don't just assert the end state).
+   - **Offline + expired access token** (seed `expires_at` in the past and abort `**/auth/v1/**`):
+     the app opens within a second, is *still* the app after 30 s (supabase-js's refresh retries
+     last ~25 s), and the stored session is kept. And the opposite: a refresh the server refuses
+     for good (`refresh_token_not_found`) closes the gate onto the login page and clears the
+     session.
+   - No horizontal overflow on the login page at phone width; with `VITE_SUPABASE_*` unset the
+     gate passes through and there is no Account card.
+   This needs a mock whose `/auth/v1/token` can reject a password and that answers
+   `/auth/v1/signup`. The Google leg is only verified up to the redirect — it has not been
+   exercised against a real Google/Supabase provider.
 
 ### "There is already data" — test against a realistic, legacy-shaped data set
 
@@ -207,7 +218,7 @@ artefact in `NotesView`, not a sync problem.
 | A storage key or entity shape | Grep the literal key everywhere ([08](08-conventions-and-gotchas.md)); decide sync / backup / import impact |
 | Anything in `sync*.js`, `syncDefs.js`, migration `0012` | `npm test`; add a case to the matching engine group; run the two-device flow above |
 | A synced view | Confirm it calls `useSyncApplied`; test "remote change arrives while the view is open" |
-| Sign-in / the Account row | Flow 8 above; remember a successful sign-in reloads, and never touch `AuthGate`/`AuthPage`/`authClient.js` casually (data-integrity files) |
+| Sign-in, sign-out, `AuthGate` | Flow 8 above, **including the offline-with-an-expired-token case**; never touch `AuthGate`/`AuthPage`/`authClient.js` casually (data-integrity files) |
 | A data-integrity file (see `CLAUDE.md`) | Don't auto-resolve conflicts; exercise the real flow, not just the build |
 | Date logic | Re-read the three conventions in [08](08-conventions-and-gotchas.md); test around DST and local midnight |
 | Voice / chat / edge function | The matcher tests; confirm a 401 is handled without a session ([10](10-ai-voice-chat.md)) |

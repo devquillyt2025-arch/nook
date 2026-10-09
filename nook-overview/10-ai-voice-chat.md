@@ -24,12 +24,13 @@ Both Claude surfaces call edge functions deployed **with JWT verification**, so 
 work for a signed-in user. The UI gates (`VoiceCommandButton`, `ChatView`) test
 `isAuthConfigured` (env vars present) — **not** whether a session exists. With Supabase
 configured but nobody signed in, the mic/send controls look enabled and the call comes back
-`401 unauthenticated`, surfaced as a toast / chat error. The app is not login-gated, so
-"signed out" is a normal state: sign in from Settings → Connections
-([01 § Auth status](01-architecture.md#auth-status--read-this-first)). With `VITE_SUPABASE_*`
-unset the controls are disabled with an explanatory tooltip ("Sign in to use voice commands" /
-"Sign in and connect to chat"). Making the gate test the session instead of the env vars
-would be a small, worthwhile follow-up if these features are ever re-enabled.
+`401 unauthenticated`, surfaced as a toast / chat error. Under the login gate a session
+normally exists, but an unverified one can still be refused (e.g. an expired token while
+offline) — handle the 401. With `VITE_SUPABASE_*` unset the controls are disabled with an
+explanatory tooltip ("Sign in to use voice commands" / "Sign in and connect to chat"). Making
+the check test the session instead of the env vars would be a small, worthwhile follow-up if
+these features are ever re-enabled
+([01 § Auth status](01-architecture.md#auth-status--read-this-first)).
 
 Voice and Chat also need a network (`useOnlineStatus`) and a browser with the Web Speech API
 (`window.SpeechRecognition || webkitSpeechRecognition`; effectively Chromium/Safari, not

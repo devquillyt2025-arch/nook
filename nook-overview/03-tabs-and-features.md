@@ -140,15 +140,17 @@ throttled to once per 1.5s, and on `nook-sync-applied` when another device's ent
 arrive. Read-only from the app's perspective.
 
 ### Settings (`settings`)
-A grid of cards: **Profile** (name/email/avatar), **Connections** (a status row per
-integration: Account — with the **optional sign-in form** (`AccountSignIn`) underneath while
-signed out — **Cross-device sync** with a *Sync now* button, Google Tasks,
-Google Calendar, Drive backup, Push, Email reminders), **Notifications** (master +
+A grid of cards, **Account first** (only when Supabase is configured: "Signed in as … /
+**Sign out**" — signing out lands on the login page), then
+**Profile** (name/email/avatar), **Connections** (a status row per integration: Account,
+**Cross-device sync** with a *Sync now* button, Google Tasks, Google Calendar, Drive backup,
+Push, Email reminders), **Notifications** (master +
 morning briefing time/streak/pomo toggles), **Google Tasks Sync**, **Google Calendar
 Sync**, **AI Assistant Integration** (the Gemini key — see 10), **App Preferences**
 (theme, week start, timer presets and durations), **Data Management** (export/import backup, Drive backup
 schedule, "Clear Local Data", and the leftover-saved-logins notice), and an About card.
-**Log out** sits below the grid.
+**Log out** sits below the grid (shown only while signed in; the Account card has a **Sign out**
+button too).
 
 ---
 
@@ -168,8 +170,7 @@ schedule, "Clear Local Data", and the leftover-saved-logins notice), and an Abou
 | `AddTaskModal.jsx` | Task creation modal. (`AddTrackerModal.jsx` is legacy.) |
 | `VoiceConfirmModal.jsx` | Confirm-before-commit dialog for a parsed voice command (hidden feature). |
 | `ErrorBoundary.jsx` | Top-level render-error recovery. |
-| `AccountSignIn.jsx` | Optional email/password + Google sign-in form, shown in Settings → Connections while signed out. A successful sign-in reloads the page (see 01). |
-| `AuthGate.jsx` / `AuthPage.jsx` | Full-screen login gate + SSO handoff + login UI — complete but **not mounted** (see 01). |
+| `AuthGate.jsx` / `AuthPage.jsx` | The login wall: `AuthGate` (mounted in `main.jsx`) shows `AuthPage` (sign in / create account / forgot / Google) when there is no session, consumes the `landing/` SSO handoff, and is offline-safe (see 01). Protected files. |
 
 ## Navigation structure (desktop rail)
 

@@ -86,61 +86,71 @@ in state, and each view re-reads its own via `useSyncApplied` (see 09).
 isAuthConfigured = Boolean(VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY)
 ```
 
-When **false** every Supabase-backed helper early-returns and the app is purely local.
-When **true**, helpers act only if a Supabase **session** exists.
+When **false** every Supabase-backed helper early-returns and the app is purely local — no
+login page, no Account card.
+When **true**, `main.jsx` wraps the app in `components/AuthGate.jsx`, so **the app is
+login-gated**: with no session you see only the login page (`components/AuthPage.jsx`), and
+every cloud helper acts only because a session exists.
 
-**The app is not login-gated.** `main.jsx` renders `<App />` directly (since commit
-`6d76bfa`, 2026-09-20, with the comment *"Temporarily bypassing AuthGate since this is
-used only locally"*). `components/AuthGate.jsx` (hard gate + SSO handoff) and
-`components/AuthPage.jsx` (full-screen sign-in / sign-up / reset / Google) are complete
-but **unmounted** — kept for a possible future gate. They are data-integrity files: don't
-edit them as part of unrelated work.
+> History: from commit `6d76bfa` (2026-09-20) until the login wall was restored, `main.jsx`
+> rendered `<App />` directly ("Temporarily bypassing AuthGate…"). During that time there was no
+> sign-in UI at all and **no device ever synced** — sync, tasks/habits cloud sync, reminders,
+> push, Drive backup, Google token exchange and the voice/Chat functions all silently did
+> nothing. A short-lived optional sign-in form in Settings (`AccountSignIn`) was tried and
+> removed in favour of the gate. Older comments or notes saying "bypassed" / "optional sign-in"
+> are stale.
 
-**Sign-in is optional and lives in Settings → Connections.** While signed out (and only
-when `isAuthConfigured`), the Account row reads "Signed out" and `components/AccountSignIn.jsx`
-renders under it: email + password **Sign in**, **Create an account**, and **Continue with
-Google** — the same three Supabase calls `AuthPage` makes (`signInWithPassword`, `signUp`,
-`signInWithOAuth`). Facts worth knowing:
+**The login page** (`AuthPage`): email + password **sign in**, **create an account**, a
+**forgot?** link that emails a reset link, and **google** sign-in. Facts worth knowing:
 
-- A successful password sign-in **reloads the page.** Several cloud features initialise
-  once on mount and look for a session then (task/habit hydrate + Realtime, push,
-  reminders); a reload puts the app in the state it was in when it was only ever mounted
-  behind a gate, rather than a half-initialised one. Google sign-in redirects away and
-  back, which has the same effect.
-- Sign-up that needs email confirmation shows an inbox notice and returns to sign-in; one
-  that returns a session signs in at once.
-- **Sign out** is the existing **Log Out** button at the bottom of Settings
-  (`handleLogout`: disconnects the Google integrations, `signOut()`, reload). Local data
-  stays on the device; sync stops (`SIGNED_OUT` → `engine.end()`).
-- There is **no "forgot password" flow.** A recovery link would create a session but nothing
-  in the running app prompts for a new password (`AuthPage`'s reset button relied on the same
-  missing step). Reset passwords from the Supabase dashboard.
-- The Account row follows `onAuthStateChange`, so it updates on sign-in/out, including from
-  another tab. It shows "Checking…" until the first answer so a signed-in user never sees the
-  form flash.
-- With `VITE_SUPABASE_*` unset there is no form and the row says "Local only — no cloud
-  features". The credentials are **never** hard-coded; whoever signs in is whoever the
-  Supabase project says they are.
+- **Signing out lands on the login page.** The **Sign out** button (Settings → Account card,
+  the first card) and the **Log Out** button at the bottom of Settings both run `handleLogout`:
+  disconnect the Google integrations, `signOut()` — falling back to
+  `signOut({ scope: 'local' })` if the server request fails, so the device is always signed
+  out — then reload. `AuthGate` finds no session and renders the login page. Both buttons
+  exist only while signed in. **Local data is not cleared**: signing back in shows the same
+  data, and sync stops while signed out (`SIGNED_OUT` → `engine.end()`).
+- **Offline-safe by design.** supabase-js reports "no session" (from `getSession()` and the
+  `INITIAL_SESSION` event) when the 1-hour access token has expired *and* the refresh request
+  can't reach the server — even though the stored session is intact. Treating that as "signed
+  out" would lock a returning user out of their own local data whenever they open Nook offline.
+  So `AuthGate` trusts a session record that is still in `localStorage`
+  (`sb-<ref>-auth-token`) **immediately** — no spinner, and no ~25 s wait while supabase-js
+  retries the refresh with back-off — and confirms it in the background. supabase-js clears the
+  record when a refresh is refused for good and keeps it when the network is merely down, so a
+  revoked session still ends on the login page (`SIGNED_OUT`). Only a real `SIGNED_OUT` closes
+  the gate. If you touch `AuthGate`, keep this: the gate must never depend on the network to
+  let a signed-in user reach their own data.
+- A fresh browser (or one that has signed out) needs the network once, to sign in; after that
+  the session persists and the app opens straight in, online or off.
+- There is **no in-app "set a new password" step.** The reset link creates a recovery session
+  but nothing prompts for a new password (`AuthPage` never called `updateUser`). If someone
+  is locked out, reset the password from the Supabase dashboard.
+- Settings → **Account** card (first card, only when `isAuthConfigured`) shows "Signed in as
+  <email>" and **Sign out**; the Connections card has a read-only Account status row. Both
+  follow `onAuthStateChange` and say "Checking…" until the first answer. The credentials are
+  never hard-coded; whoever signs in is whoever the Supabase project says they are.
+- Gate-free development: with `VITE_SUPABASE_*` unset (an `envDir` holding an empty `.env`, see
+  [07](07-build-and-setup.md)) the gate passes straight through, which is how the app is
+  exercised without an account.
 
 What a signed-in session switches on: cross-device sync of everything (`synced_items`),
 the tasks/habits Supabase sync + Realtime, reminders, Web Push, Drive backup, the Google
 OAuth token exchange (`google-oauth` verifies the caller's session), and the voice/Chat edge
 functions. **Without a session they all degrade to "do nothing"** — which is why no code may
-assume one exists.
+assume one exists (the gate guarantees one in the UI, but helpers are also called from
+timers and the service worker's wake-ups).
 
-The `landing/` → app **SSO handoff** (`#sb_access_token=…` in the URL hash) is still dead:
-`AuthGate` is what consumes it, and it is not mounted. Its custom key names deliberately
-differ from Supabase's own OAuth / magic-link hash format (which `detectSessionInUrl`
-handles natively) so they don't collide — don't rename them on one side only. Reviving the
-handoff means mounting `AuthGate` again:
+The `landing/` → app **SSO handoff** (`#sb_access_token=…` in the URL hash) works again:
+`AuthGate` consumes it once, scrubs the hash, and a failed handoff shows its error on the
+login page. Its custom key names deliberately differ from Supabase's own OAuth / magic-link
+hash format (which `detectSessionInUrl` handles natively) so they don't collide — don't rename
+them on one side only.
 
-```jsx
-<ErrorBoundary …><AuthGate><App /></AuthGate></ErrorBoundary>
-```
-
-With `VITE_SUPABASE_*` set that is a **hard gate** (login before anything else; the
-local-first "just open it" experience is gone on a fresh browser). It is a product decision,
-not a bug fix — the optional Settings sign-in was chosen instead.
+`AuthGate.jsx`, `AuthPage.jsx` and `authClient.js` are data-integrity files (see
+`CLAUDE.md`): change them deliberately, test the whole sign-in → use → sign-out → sign-in loop
+**and** the offline-with-an-expired-token case (see
+[11](11-testing-and-verification.md)), and never auto-resolve a merge conflict in them.
 
 ---
 
@@ -178,12 +188,14 @@ no-ops without a configured project and a signed-in session. See
 
 ## Component composition
 
-`main.jsx` currently mounts:
+`main.jsx` mounts:
 
 ```jsx
 <StrictMode>
   <ErrorBoundary title="Nook hit an unexpected error" message="Your data is safe in local storage …">
-    <App />                      {/* AuthGate is bypassed — see "Auth status" above */}
+    <AuthGate>                   {/* login page when signed out; passes through if Supabase isn't configured */}
+      <App />
+    </AuthGate>
   </ErrorBoundary>
 </StrictMode>
 ```

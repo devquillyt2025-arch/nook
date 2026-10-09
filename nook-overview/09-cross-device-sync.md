@@ -19,12 +19,11 @@ assumes a session exists.
    quietly and Settings → Connections shows "Couldn't reach the server — N changes
    waiting".
 3. **A Supabase session.** `startSync()` only *waits for* one (`getSession()` +
-   `onAuthStateChange`); it cannot create one. The app is not login-gated, so the user signs
-   in from **Settings → Connections** (`AccountSignIn`; see
-   [01 § Auth status](01-architecture.md#auth-status--read-this-first)). The page reloads on
-   sign-in and sync begins; supabase-js persists the session so later visits start synced.
-   Until then the observer is installed but the engine is inactive and the Connections row
-   reads "Waiting for sign-in".
+   `onAuthStateChange`); it cannot create one. The app is login-gated (`AuthGate`; see
+   [01 § Auth status](01-architecture.md#auth-status--read-this-first)), so any signed-in
+   user has one: sync begins right after sign-in, and supabase-js persists the session so
+   later visits start synced. While signed out the engine is inactive (the Connections row
+   would read "Waiting for sign-in").
 
 ## The contract
 

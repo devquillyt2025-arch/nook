@@ -8,18 +8,17 @@ bugs to fix — each is a real decision with a real cost to "cleaning up".
 
 ## Read the code, not just the comments: things that are not what they look like
 
-- **`AuthGate` is not mounted — sign-in is optional and lives in Settings.**
-  `AuthGate.jsx`/`AuthPage.jsx` are complete, and several comments (and older docs) say the
-  app is login-gated — but since `6d76bfa` `main.jsx` renders `<App />` directly
-  ("Temporarily bypassing AuthGate since this is used only locally"). The way to get a
-  session is the **Sign in form in Settings → Connections** (`AccountSignIn.jsx`; a
-  successful sign-in reloads the page). Every session-dependent feature (cross-device sync,
-  tasks/habits sync, reminders, push, Drive backup, Google token exchange, voice/Chat) is
-  inert until someone has signed in there. `AuthGate`'s own header comment and `backup.js`'s
-  "export only" header are similarly stale. See
+- **The app is login-gated, and the gate is deliberately offline-safe.** `main.jsx` wraps
+  `<App />` in `AuthGate`; signing out reloads onto the login page. `AuthGate` lets a user in
+  on the strength of a session record still in `localStorage` — it does **not** wait for
+  `getSession()`, because supabase-js reports "no session" when the access token has expired
+  and the refresh can't reach the server (offline), and that would lock someone out of their
+  own local data (and make them wait ~25 s on a spinner). Don't "simplify" it back to
+  `getSession()`-only. For a month (from `6d76bfa`, 2026-09-20) the gate was bypassed, no
+  sign-in UI existed and nothing ever synced; any note that says "bypassed" or "optional
+  sign-in" is stale, as is `backup.js`'s "export only" header. See
   [01 § Auth status](01-architecture.md#auth-status--read-this-first). Don't assume a
-  feature is broken because its UI is missing; check whether it's hidden or gated. And
-  don't "simplify" by mounting the gate again — it turns the local-first app into a login wall.
+  feature is broken because its UI is missing; check whether it's hidden or gated.
 - **Hidden ≠ deleted.** Voice commands, the Chat tab and the Gemini assistant are fully
   built but their entry points are commented out in `App.jsx`. Re-enable by uncommenting
   those lines, not by rewriting them. Details in [10](10-ai-voice-chat.md).

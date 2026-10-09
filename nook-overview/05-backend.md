@@ -11,9 +11,8 @@ Nook has **no server of its own for your content** — the UI always reads
    [09-cross-device-sync.md](09-cross-device-sync.md)).
 
 Everything here is **optional**: with `VITE_SUPABASE_*` unset, every helper below
-early-returns. **And it only acts when a session exists.** The app is not login-gated
-(`AuthGate` is not mounted); a session is created by the optional sign-in form in
-Settings → Connections (`AccountSignIn.jsx`) — see
+early-returns. **And it only acts when a session exists.** With Supabase configured the app
+is login-gated (`AuthGate` in `main.jsx` shows the login page until someone signs in) — see
 [01-architecture.md § Auth status](01-architecture.md#auth-status--read-this-first).
 
 `utils/authClient.js`:
@@ -239,8 +238,7 @@ router never grows a second, less-audited entry point via chat.
 (set by the marketing site after login), establishes the Supabase session, then
 scrubs the hash. Those custom hash keys deliberately avoid Supabase's native
 OAuth/magic-link hash format (handled by `detectSessionInUrl`). Don't rename them
-on one side only. **Dead while `AuthGate` is unmounted** (it is what consumes the hash; the
-Settings sign-in form does not).
+on one side only. Works because `AuthGate` is mounted (it is what consumes the hash).
 
 ## Advisor notes (live project, last checked after migration 0012)
 

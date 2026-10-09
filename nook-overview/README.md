@@ -18,10 +18,10 @@ backups, call an LLM with a private key). Cloud is always an addition to
 localStorage, never a replacement.
 
 > **Read [01-architecture.md § Auth status](01-architecture.md#auth-status--read-this-first)
-> before relying on sign-in.** The app is not login-gated (`AuthGate` is not mounted in
-> `main.jsx`); sign-in is **optional and lives in Settings → Connections**, and nothing
-> cloud-backed (sync, reminders, push, Drive backup, voice/chat) activates until someone
-> signs in there.
+> before relying on sign-in.** With Supabase configured the app is **login-gated**
+> (`AuthGate` in `main.jsx`): signed out you see only the login page, and **signing out lands
+> back on it**. Nothing cloud-backed (sync, reminders, push, Drive backup, voice/chat) works
+> without a session. The gate is deliberately offline-safe for returning users.
 
 ---
 
@@ -67,7 +67,7 @@ index.html              App entry; registers /sw.js; loads fonts + confetti
 vite.config.js          Vite config (also copies nook-favicon.png into public/ and src/ on load)
 public/                 manifest.json, icons, sw.js (offline cache + Web Push)
 src/
-  main.jsx              Mounts <ErrorBoundary><App/></ErrorBoundary>  (no AuthGate; optional sign-in is in Settings — see 01)
+  main.jsx              Mounts <ErrorBoundary><AuthGate><App/></AuthGate></ErrorBoundary>  (login wall — see 01)
   App.jsx               ~2100 lines. Holds most state; routes the 13 tabs; starts sync.
   index.css             The entire stylesheet (~8600 lines).
   habitsStore.js        Habits data layer (nook_habits).
@@ -88,9 +88,8 @@ imports), `vite.sandbox.config.js` (machine-local scratch config pointing at a t
 dir), `nook-favicon1.png`, `test-results/` (empty).
 
 > **`landing/` is a standalone Next.js marketing app.** It shares nothing with the SPA
-> except a *planned* SSO token handoff (see [05-backend.md](05-backend.md)) that is
-> currently dead because `AuthGate` (the thing that consumes it) is not mounted. Do not
-> change app behaviour there.
+> except an SSO token handoff (see [05-backend.md](05-backend.md)) that `AuthGate`
+> consumes. Do not change app behaviour there.
 
 ---
 

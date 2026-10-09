@@ -49,13 +49,15 @@ plus one generic `synced_items` table (per-item last-write-wins) for everything 
 With `VITE_SUPABASE_*` unset every cloud helper no-ops. **Never write code that assumes
 a session exists.** → [01](nook-overview/01-architecture.md), [05](nook-overview/05-backend.md)
 
-> **`AuthGate` is NOT mounted — the app is not login-gated.** `main.jsx` renders `<App />`
-> directly (since `6d76bfa`). Sign-in is **optional and lives in Settings → Connections**
-> (`AccountSignIn.jsx`; a successful sign-in reloads the page). Everything that needs a
-> session — cross-device sync, tasks/habits cloud sync, reminders, push, Drive backup,
-> Google token exchange, voice/Chat — is inert until someone signs in there. Comments and
-> old notes that say "login-gated" are stale. Don't re-mount the gate without a product
-> decision. → [01 § Auth status](nook-overview/01-architecture.md#auth-status--read-this-first)
+> **The app is login-gated.** `main.jsx` wraps `<App />` in `AuthGate`: with `VITE_SUPABASE_*`
+> set, signed out you see only the login page, and **signing out lands back on it** (local
+> data stays on the device). Everything that needs a session — cross-device sync, tasks/habits
+> cloud sync, reminders, push, Drive backup, Google token exchange, voice/Chat — depends on it.
+> The gate is **deliberately offline-safe**: it trusts a stored session at once instead of
+> waiting on `getSession()`, which reports "no session" when an expired token can't be
+> refreshed offline. Don't "simplify" that. (The gate was bypassed 2026-09-20 → October 2026;
+> notes saying "bypassed" or "optional sign-in" are stale.) →
+> [01 § Auth status](nook-overview/01-architecture.md#auth-status--read-this-first)
 
 There are **13 tabs**; ids ≠ labels for two (`daily`→"Today", `timer`→"Focus
 Timer"). Full table in
