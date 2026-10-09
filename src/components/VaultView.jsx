@@ -18,32 +18,46 @@ function initials(str) {
     : str.slice(0, 2).toUpperCase();
 }
 
+// Reads an entry's custom fields, transparently upgrading the old fixed
+// username/password/url shape (still present on entries saved before this
+// redesign) into the generic { id, label, value, secret } shape on the fly.
+// Read-only — storage isn't rewritten until the entry is next saved.
+function getEntryFields(entry) {
+  if (Array.isArray(entry.fields)) return entry.fields;
+  const legacy = [];
+  if (entry.username) legacy.push({ id: genId(), label: 'Username',    value: entry.username, secret: false });
+  if (entry.password) legacy.push({ id: genId(), label: 'Password',    value: entry.password, secret: true  });
+  if (entry.url)      legacy.push({ id: genId(), label: 'Website URL', value: entry.url,      secret: false });
+  return legacy;
+}
+const blankField = () => ({ id: genId(), label: '', value: '', secret: false });
+
 // ── Add / Edit Modal ──────────────────────────────────────────────
 function VaultModal({ entry, defaultService, services, onSave, onClose }) {
-  const [service,  setService]  = useState(entry?.title    || defaultService || '');
-  const [username, setUsername] = useState(entry?.username || '');
-  const [password, setPassword] = useState(entry?.password || '');
-  const [url,      setUrl]      = useState(entry?.url      || '');
-  const [showPw,   setShowPw]   = useState(false);
+  const [service, setService] = useState(entry?.title || defaultService || '');
+  const [fields,  setFields]  = useState(() => {
+    const initial = entry ? getEntryFields(entry) : [];
+    return initial.length ? initial.map(f => ({ ...f, id: f.id || genId() })) : [blankField()];
+  });
   const firstRef = useRef(null);
   const submittingRef = useRef(false); // guards a same-frame double-submit (double-Enter)
   useEffect(() => { firstRef.current?.focus(); }, []);
+
+  const updateField = (id, patch) => setFields(prev => prev.map(f => f.id === id ? { ...f, ...patch } : f));
+  const removeField = (id) => setFields(prev => prev.filter(f => f.id !== id));
+  const addField     = () => setFields(prev => [...prev, blankField()]);
 
   const submit = (e) => {
     e.preventDefault();
     if (!service.trim() || submittingRef.current) return;
     submittingRef.current = true;
-    // Reject non-http(s) schemes (e.g. javascript:) the same way LinksView does —
-    // prefixing https:// neuters anything that isn't already http(s) into a
-    // harmless malformed URL instead of a live javascript: URI.
-    let finalUrl = url.trim();
-    if (finalUrl && !/^https?:\/\//i.test(finalUrl)) finalUrl = 'https://' + finalUrl;
+    const cleanFields = fields
+      .map(f => ({ ...f, label: f.label.trim(), value: f.secret ? f.value : f.value.trim() }))
+      .filter(f => f.label || f.value);
     onSave({
       id:        entry?.id || genId(),
       title:     service.trim(),
-      username:  username.trim(),
-      password,
-      url:       finalUrl,
+      fields:    cleanFields,
       createdAt: entry?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -56,6 +70,7 @@ function VaultModal({ entry, defaultService, services, onSave, onClose }) {
     onBlur:  e => (e.target.style.borderColor = 'var(--border)'),
     ...extra,
   });
+  const smallLabel = { display: 'block', fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -82,26 +97,44 @@ function VaultModal({ entry, defaultService, services, onSave, onClose }) {
               {services.map(s => <option key={s} value={s} />)}
             </datalist>
           </div>
-          {/* Username */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' }}>Username / Email</label>
-            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="username@example.com" autoComplete="off" {...field()} />
-          </div>
-          {/* Password */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' }}>Password</label>
-            <div style={{ position: 'relative' }}>
-              <input value={password} onChange={e => setPassword(e.target.value)} type={showPw ? 'text' : 'password'} placeholder="Enter password" autoComplete="new-password" {...field({ style: { ...field().style, paddingRight: 42 } })} />
-              <button type="button" onClick={() => setShowPw(p => !p)} aria-label={showPw ? 'Hide password' : 'Show password'}
-                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 4 }}>
-                <EyeIcon open={showPw} size={17} />
-              </button>
-            </div>
-          </div>
-          {/* URL */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' }}>Website URL</label>
-            <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://example.com" type="url" {...field()} />
+          {/* Custom fields — two inputs (label + value) per row, add as many rows as needed */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {fields.map((f, i) => (
+              <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg-input)' }}>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label style={smallLabel}>Field label</label>
+                    <input value={f.label} onChange={e => updateField(f.id, { label: e.target.value })}
+                      placeholder="e.g. Username, PIN" {...field()} style={{ ...field().style, background: 'var(--bg-elevated)' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label style={smallLabel}>Field value</label>
+                    <div style={{ position: 'relative' }}>
+                      <input value={f.value} onChange={e => updateField(f.id, { value: e.target.value })}
+                        type={f.secret ? 'password' : 'text'} autoComplete="off" placeholder="Value"
+                        {...field({ style: { ...field().style, background: 'var(--bg-elevated)', paddingRight: 38 } })} />
+                      <button type="button" onClick={() => updateField(f.id, { secret: !f.secret })}
+                        aria-label={f.secret ? 'Marked sensitive — value hidden' : 'Mark as sensitive value'} title={f.secret ? 'Sensitive value (click to unmask while typing)' : 'Mark as sensitive value'}
+                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: f.secret ? 'var(--accent)' : 'var(--text-muted)', display: 'flex', padding: 4 }}>
+                        <EyeIcon open={!f.secret} size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {fields.length > 1 && (
+                  <button type="button" onClick={() => removeField(f.id)}
+                    style={{ alignSelf: 'flex-end', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 600, padding: '2px 4px', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Remove row
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addField}
+              style={{ alignSelf: 'flex-start', background: 'none', border: '1px dashed var(--border)', borderRadius: 8, color: 'var(--accent)', fontSize: '0.8rem', fontWeight: 600, padding: '7px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add row
+            </button>
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 2 }}>
             <button type="submit" style={{ flex: 1, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 0', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', transition: 'background .13s' }}
@@ -140,10 +173,37 @@ function CopyBtn({ text, label }) {
   );
 }
 
+// One field's value cell — owns its own reveal state so multiple secret
+// fields on the same row don't share a single show/hide toggle.
+function FieldValue({ f }) {
+  const [show, setShow] = useState(false);
+  if (!f.value) return <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>—</span>;
+  if (!f.secret) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+        <span style={{ fontSize: '0.84rem', color: 'var(--text-primary)', wordBreak: 'break-word' }}>{f.value}</span>
+        <CopyBtn text={f.value} label={`Copy ${f.label || 'value'}`} />
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontFamily: show ? 'inherit' : 'monospace', letterSpacing: show ? 'normal' : '.1em' }}>
+        {show ? f.value : '••••••••'}
+      </span>
+      <button onClick={() => setShow(s => !s)} aria-label={show ? 'Hide value' : 'Reveal value'}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: show ? 'var(--accent)' : 'var(--text-muted)', padding: 5, display: 'flex', borderRadius: 5, flexShrink: 0 }}>
+        <EyeIcon open={show} />
+      </button>
+      <CopyBtn text={f.value} label={`Copy ${f.label || 'value'}`} />
+    </span>
+  );
+}
+
 // ── Account Row (inside expanded group) ──────────────────────────
 function AccountRow({ entry, onEdit, onDelete }) {
-  const [showPw,     setShowPw]     = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const fields = getEntryFields(entry).filter(f => f.label || f.value);
 
   const iconBtn = (label, color, hoverBg, hoverColor, children, onClick) => (
     <button onClick={onClick} aria-label={label} title={label}
@@ -155,42 +215,24 @@ function AccountRow({ entry, onEdit, onDelete }) {
   );
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 12px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', minWidth: 0 }}>
 
-      {/* Username */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {entry.username || <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>No username</span>}
-        </span>
-        {entry.url && (
-          <a href={entry.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-            style={{ fontSize: '0.72rem', color: 'var(--accent)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {entry.url.replace(/^https?:\/\/(www\.)?/, '')}
-          </a>
-        )}
-      </div>
-
-      {/* Password section */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        {entry.password ? (
-          <>
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontFamily: showPw ? 'inherit' : 'monospace', letterSpacing: showPw ? 'normal' : '.1em', minWidth: 70 }}>
-              {showPw ? entry.password : '••••••••'}
+      {/* Fields */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {fields.length === 0 ? (
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No fields added</span>
+        ) : fields.map(f => (
+          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', minWidth: 72 }}>
+              {f.label || 'Field'}
             </span>
-            <button onClick={() => setShowPw(p => !p)} aria-label={showPw ? 'Hide password' : 'Reveal password'}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: showPw ? 'var(--accent)' : 'var(--text-muted)', padding: 5, display: 'flex', borderRadius: 5, flexShrink: 0 }}>
-              <EyeIcon open={showPw} />
-            </button>
-            <CopyBtn text={entry.password} label="Copy password" />
-          </>
-        ) : (
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', minWidth: 70 }}>No password</span>
-        )}
+            <FieldValue f={f} />
+          </div>
+        ))}
       </div>
 
       {/* Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-        {entry.username && <CopyBtn text={entry.username} label="Copy username" />}
         {iconBtn('Edit account', 'var(--text-muted)', 'var(--bg-hover)', 'var(--accent)', (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         ), () => onEdit(entry))}
@@ -324,8 +366,9 @@ export default memo(function VaultView() {
     const filtered = q
       ? entries.filter(e =>
           e.title.toLowerCase().includes(q) ||
-          e.username.toLowerCase().includes(q) ||
-          (e.url || '').toLowerCase().includes(q)
+          getEntryFields(e).some(f =>
+            f.label.toLowerCase().includes(q) || (!f.secret && f.value.toLowerCase().includes(q))
+          )
         )
       : entries;
 

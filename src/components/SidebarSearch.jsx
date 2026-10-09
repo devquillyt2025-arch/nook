@@ -77,8 +77,10 @@ export function useNookSearch(tasks, habits) {
 
     try {
       JSON.parse(localStorage.getItem('nook_vault') || '[]').forEach(v => {
-        if (v.name?.toLowerCase().includes(q) || v.username?.toLowerCase().includes(q) || v.url?.toLowerCase().includes(q)) {
-          results.push({ type: 'vault', id: v.id, title: v.name, sub: v.username || v.url, tab: 'vault' });
+        const vFields = Array.isArray(v.fields) ? v.fields : [v.username && { label: 'Username', value: v.username, secret: false }, v.url && { label: 'Website URL', value: v.url, secret: false }].filter(Boolean);
+        const sub = vFields.find(f => !f.secret && f.value)?.value || '';
+        if (v.title?.toLowerCase().includes(q) || vFields.some(f => !f.secret && f.value?.toLowerCase().includes(q))) {
+          results.push({ type: 'vault', id: v.id, title: v.title, sub, tab: 'vault' });
         }
       });
     } catch {}
