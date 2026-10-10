@@ -125,7 +125,15 @@ background-tab throttling can't drift it.
 
 ### Links (`links`)
 Bookmark manager: categories (a custom dropdown for the filter, the themed `Select` in
-the add/edit modal), auto-fetched favicons, and starring favourites. The toolbar (search,
+the add/edit modal), auto-fetched favicons, and starring favourites. The first screen is
+**Groups**: a tile per category (`utils/linkGroups.js` — grouped case-insensitively on the trimmed
+category and labelled with the most-used spelling, A–Z, with an *Uncategorised* tile last so links
+with no category are never hidden at the top level). A tile opens that category's links under a
+"← All groups" breadcrumb; **Grid** and **List** remain the flat all-links views. Typing in search
+leaves the tiles (global at the top level, scoped to the open group inside one); *Add Link* from
+inside a group starts in that category; a group whose last link is deleted simply disappears (a
+filter on a group that no longer exists counts as no filter). The view mode isn't persisted — Links
+always opens on the tiles. The toolbar (search,
 Add Link, grid/list toggle, category filter, count) is **pinned** (`.lk-bar`) with a line under
 it while the links scroll beneath, and wraps onto more rows when narrow
 ([06 § Pinned headers](06-ui-and-styling.md#pinned-headers-sticky-toolbars)). Favicon lookups
