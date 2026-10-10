@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
 import { useSyncApplied } from '../utils/useSyncApplied';
 import { genId } from '../utils/id';
+import { UNCAT, catKeyOf, groupLinks } from '../utils/linkGroups';
 
 const STORAGE_KEY = 'nook_links';
 const BASE_CATS = ['Personal', 'Work', 'Finance', 'Read Later', 'Entertainment'];
@@ -75,7 +76,8 @@ function CategoryDropdown({ value, onChange, options }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const allOptions = [{ value: '', label: 'All categories' }, ...options.map(o => ({ value: o, label: o }))];
+  // options: plain strings, or { value, label } where the stored group key differs from what's shown.
+  const allOptions = [{ value: '', label: 'All categories' }, ...options.map(o => (typeof o === 'string' ? { value: o, label: o } : o))];
   const selected = allOptions.find(o => o.value === value) || allOptions[0];
 
   const choose = (val) => { onChange(val); setOpen(false); };
@@ -169,6 +171,43 @@ function CategoryDropdown({ value, onChange, options }) {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ── Group tile — one per category; opens that category's links ────
+function GroupTile({ group, onOpen }) {
+  const uncat = group.key === UNCAT;
+  const cs = uncat ? { bg: 'rgba(107,114,128,.12)', color: 'var(--text-secondary)' } : catStyle(group.label);
+  const n = group.links.length, starred = group.links.filter(l => l.starred).length;
+  const preview = group.links.slice(0, 4), more = n - preview.length;
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: .96 }}
+      transition={{ duration: .16 }}
+      onClick={onOpen} role="button" tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+      aria-label={`Open ${group.label}: ${n} link${n === 1 ? '' : 's'}`}
+      whileHover={{ boxShadow: '0 4px 14px rgba(0,0,0,.1)', y: -1 }}
+      className="links-tile"
+      style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14, cursor: 'pointer', minWidth: 0 }}
+    >
+      <div className="links-tile-head" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ width: 36, height: 36, borderRadius: 10, background: cs.bg, color: cs.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{group.label}</div>
+          <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: 2 }}>
+            {n} link{n === 1 ? '' : 's'}{starred > 0 && <span style={{ color: 'var(--color-amber)' }}> · ★ {starred}</span>}
+          </div>
+        </div>
+      </div>
+      <div className="links-tile-fav" style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 22 }}>
+        {preview.map(l => <FaviconIcon key={l.id} url={l.url} size={22} />)}
+        {more > 0 && <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-muted)', marginLeft: 2 }}>+{more}</span>}
+      </div>
+    </motion.div>
   );
 }
 
@@ -281,10 +320,10 @@ function LinkCard({ link, onEdit, onDelete, onToggleStar, compact }) {
 }
 
 // ── Add / Edit Modal ──────────────────────────────────────────────
-function LinksModal({ entry, existingCats, onSave, onClose }) {
+function LinksModal({ entry, existingCats, defaultCategory = '', onSave, onClose }) {
   const [name,     setName]     = useState(entry?.name     || '');
   const [url,      setUrl]      = useState(entry?.url      || '');
-  const [catSel,   setCatSel]   = useState(entry?.category || '');
+  const [catSel,   setCatSel]   = useState(entry?.category || defaultCategory);   // adding from inside a group starts in that group
   const [newCat,   setNewCat]   = useState('');
   const [addingCat, setAddingCat] = useState(false);
   const firstRef = useRef(null);
@@ -392,9 +431,9 @@ export default memo(function LinksView() {
   const [links,     setLinks]     = useState(load);
   useSyncApplied(['links'], () => setLinks(load()));   // another device's change, merged into storage
   const [query,     setQuery]     = useState('');
-  const [catFilter, setCatFilter] = useState('');
+  const [catFilter, setCatFilter] = useState('');   // a group key (see utils/linkGroups), '' = none
   const [modal,     setModal]     = useState(null); // null | 'add' | entry
-  const [viewMode,  setViewMode]  = useState('grid'); // 'grid' | 'list'
+  const [viewMode,  setViewMode]  = useState('groups'); // 'groups' (a tile per category — the first screen) | 'grid' | 'list' (all links, flat)
 
   const saveLink = (link) => {
     setLinks(prev => {
@@ -424,16 +463,24 @@ export default memo(function LinksView() {
     });
   };
 
-  const allCats = useMemo(() => [...new Set(links.map(l => l.category).filter(Boolean))].sort(), [links]);
+  // One group per category (case-insensitive) + "Uncategorised" — see utils/linkGroups.js.
+  const groups = useMemo(() => groupLinks(links), [links]);
+  const allCats = useMemo(() => groups.filter(g => g.key !== UNCAT).map(g => g.label), [groups]);   // for the add/edit modal
+  // A filter pointing at a group that no longer exists (its last link was deleted) means "no filter".
+  const activeCat = catFilter && groups.some(g => g.key === catFilter) ? catFilter : '';
+  const activeGroup = groups.find(g => g.key === activeCat) || null;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let out = links;
     if (q)         out = out.filter(l => l.name.toLowerCase().includes(q) || l.url.toLowerCase().includes(q) || (l.category||'').toLowerCase().includes(q));
-    if (catFilter) out = out.filter(l => l.category === catFilter);
+    if (activeCat) out = out.filter(l => catKeyOf(l) === activeCat);
     // starred first
     return [...out.filter(l => l.starred), ...out.filter(l => !l.starred)];
-  }, [links, query, catFilter]);
+  }, [links, query, activeCat]);
+
+  // The tiles are the first screen; typing in the search box, or opening a group, leaves them.
+  const showGroups = viewMode === 'groups' && !activeCat && query.trim() === '';
 
   const catCount = allCats.length;
   const n = filtered.length;
@@ -447,18 +494,29 @@ export default memo(function LinksView() {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'transparent', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', background: 'transparent' }}>
       <style>{`
         @media (max-width: 768px) {
-          .links-toolbar { flex-wrap: wrap !important; }
           .links-toolbar .links-search { max-width: 100% !important; }
           .links-grid { grid-template-columns: 1fr !important; }
+          .links-groups { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
+          /* Two tiles per row leaves ~130px each: stack the icon above the name (so names aren't
+             cut to "Ne…") and let the favicon row wrap instead of overflowing the tile. */
+          .links-tile { padding: 14px !important; gap: 12px !important; overflow: hidden; }
+          .links-tile-head { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
+          .links-tile-head > div { width: 100%; }
+          .links-tile-fav { flex-wrap: wrap; }
+        }
+        @media (max-width: 360px) {
+          .links-groups { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
-      {/* ── Toolbar ── */}
-      <div style={{ padding: '16px 24px 16px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0, marginBottom: 16 }}>
-        <div className="links-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+      {/* ── Toolbar — pinned (position:sticky, see .lk-bar) while the links scroll under it.
+          The root above must not set overflow/height: either would turn it into the sticky
+          bar's scroll container and stop it pinning to the tab's scroll area. ── */}
+      <div className="lk-bar">
+        <div className="links-toolbar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, width: '100%' }}>
 
           {/* Search */}
           <div className="links-search" style={{ position: 'relative', width: 280, flexShrink: 0 }}>
@@ -473,17 +531,20 @@ export default memo(function LinksView() {
 
           {/* View toggle — beside Add Link */}
           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            {vmBtn('grid', 'Grid view',
+            {vmBtn('groups', 'Groups — a tile per category',
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            )}
+            {vmBtn('grid', 'Grid view — all links',
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
             )}
-            {vmBtn('list', 'List view',
+            {vmBtn('list', 'List view — all links',
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             )}
           </div>
 
           {/* Category filter */}
           {allCats.length > 0 && (
-            <CategoryDropdown value={catFilter} onChange={setCatFilter} options={allCats} />
+            <CategoryDropdown value={activeCat} onChange={setCatFilter} options={groups.map(g => ({ value: g.key, label: g.label }))} />
           )}
 
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', flex: 1 }}>{countLabel}</span>
@@ -492,7 +553,7 @@ export default memo(function LinksView() {
       </div>
 
       {/* ── Content ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 24px 24px', scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 24px 24px', scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent' }}>
         <div style={{ width: '100%' }}>
 
           {links.length === 0 ? (
@@ -510,6 +571,13 @@ export default memo(function LinksView() {
               </button>
             </div>
 
+          ) : showGroups ? (
+            <div className="links-groups" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 }}>
+              <AnimatePresence>
+                {groups.map(g => <GroupTile key={g.key} group={g} onOpen={() => setCatFilter(g.key)} />)}
+              </AnimatePresence>
+            </div>
+
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
               <div style={{ fontWeight: 600, marginBottom: 8 }}>No links match your filters</div>
@@ -517,19 +585,33 @@ export default memo(function LinksView() {
             </div>
 
           ) : (
-            <div className="links-grid" style={viewMode === 'list'
-              ? { display: 'flex', flexDirection: 'column', gap: 6 }
-              : { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-              <AnimatePresence>
-                {filtered.map(link => (
-                  <LinkCard key={link.id} link={link}
-                    compact={viewMode === 'list'}
-                    onEdit={l => setModal(l)}
-                    onDelete={deleteLink}
-                    onToggleStar={toggleStar} />
-                ))}
-              </AnimatePresence>
-            </div>
+            <>
+              {/* Inside a group: a way back to the tiles */}
+              {viewMode === 'groups' && activeGroup && (
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+                  <button type="button" onClick={() => setCatFilter('')}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontWeight: 600, fontSize: '0.84rem', padding: '4px 0', fontFamily: 'inherit' }}>
+                    ← All groups
+                  </button>
+                  <span aria-hidden="true" style={{ color: 'var(--text-muted)' }}>/</span>
+                  <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{activeGroup.label}</span>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{n} link{n !== 1 ? 's' : ''}</span>
+                </div>
+              )}
+              <div className="links-grid" style={viewMode === 'list'
+                ? { display: 'flex', flexDirection: 'column', gap: 6 }
+                : { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+                <AnimatePresence>
+                  {filtered.map(link => (
+                    <LinkCard key={link.id} link={link}
+                      compact={viewMode === 'list'}
+                      onEdit={l => setModal(l)}
+                      onDelete={deleteLink}
+                      onToggleStar={toggleStar} />
+                  ))}
+                </AnimatePresence>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -541,6 +623,7 @@ export default memo(function LinksView() {
             key={modal === 'add' ? 'new' : modal.id}
             entry={modal === 'add' ? null : modal}
             existingCats={allCats}
+            defaultCategory={modal === 'add' && activeGroup && activeGroup.key !== UNCAT ? activeGroup.label : ''}
             onSave={saveLink}
             onClose={() => setModal(null)}
           />

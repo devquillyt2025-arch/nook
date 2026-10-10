@@ -12,15 +12,15 @@ import { localDateStr, isScheduledOn as habitScheduledOn, isCompletedOn as habit
 export const POMODORO_MIN = 25; // one logged focus session ≈ 25 min (timerUtils default)
 
 // ─── Date helpers ──────────────────────────────────────────────────
-function shift(ds, deltaDays) {
+export function shift(ds, deltaDays) {
   const d = new Date(ds + 'T12:00:00');
   d.setDate(d.getDate() + deltaDays);
   return localDateStr(d);
 }
-function daysBetween(a, b) {
+export function daysBetween(a, b) {
   return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
 }
-function eachDay(start, end) {
+export function eachDay(start, end) {
   const out = [];
   let d = start;
   // guard against an inverted range

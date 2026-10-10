@@ -59,7 +59,16 @@ The sidebar is an **always-mounted icon rail**, not a mount/unmount toggle:
   **`MutationObserver`** (not a media query) so the search trigger collapses in
   sync with the JS toggle.
 - CSS-only tooltips: `data-tooltip` + `::after` pseudo-element with
-  `transition-delay: 0.3s`.
+  `transition-delay: 0.3s`. (Nothing sets `data-tooltip` today, and `.main-nav` clips overflow, so
+  they never actually show — the rail items use `title`.)
+- **Pinned head, scrolling list.** `.main-nav` itself doesn't scroll (`overflow: hidden`). The logo
+  row and the search sit in `.sidebar-head` — pinned, with a line under it; Main / More / Utility sit
+  in `.nav-scroll`, the only part that scrolls (scrollbar hidden, wheel / keyboard focus still work);
+  Settings sits below it, pinned to the bottom. `.nav-scroll` is `flex: 0 1 auto`, so it only shrinks
+  (and scrolls) when the window is too short — a tall window looks as it always did. Two traps:
+  it must be a **flex column** (as a plain block the buttons' `margin: 3px 0` collapses and the list
+  packs ~56px tighter), and its box reaches into `.main-nav`'s padding (negative margin + matching
+  padding; 6px in the rail) or the active item's glow is clipped at the edges.
 - **Mobile (≤768px):** `.main-nav` is `display:none` regardless of state; the
   mobile bottom nav handles navigation. Do not change this.
 
@@ -84,6 +93,37 @@ its field): modals and scrolling side panels clip that, which is how the Journal
 date popup ended up cut off. A click inside a popup must not count as "outside" for the thing that
 opened it — popups carry `data-nk-popover` for outside-click handlers to check (see JournalView's
 export menu). `components/themedControls.test.js` fails if a native control is added back.
+
+## Pinned headers (sticky toolbars)
+
+The Activity Log, Notes, Links, Countdowns and Today keep their toolbar on screen with a
+`border-bottom` line under it while the content scrolls beneath. The scroll container is
+**`.tab-content`** (the page itself, on phones too), so this is plain `position: sticky; top: 0;
+z-index: 30; background: var(--bg-base)` on the header — `.al-toolbar`, `.nv-bar` + `.lk-bar` (one
+shared rule), `.cdp-head`, `.today-head`. To pin another tab's header the same way: add
+`<tab>-tab-active` to the wrapper in `App.jsx` (Today's shell class is the older `yartu-tab-active`),
+add it to the `padding-top: 0` rule in `index.css`, and give the header the sticky rule. Today's
+greeting card is trimmed while pinned (smaller padding) and on a phone shrinks to the name, a 2×2
+grid of counts and a slim toggle (~190px, ~22% of the screen, down from ~300px) — measure a pinned
+block before shipping it.
+The traps:
+
+- **Drop the tab shell's top padding** (`.sunsama-tab-transition.<tab>-tab-active { padding-top: 0 }`,
+  class added in `App.jsx`'s wrapper `className`). Otherwise the header travels the 32px of padding
+  upward before it pins, which reads as "moving on first scroll". The header then supplies its own
+  top padding (24px). The page wrapper (`.cdp-page`, `.al-view`) gets no top padding either.
+- **No `overflow` / fixed `height` between the header and `.tab-content`.** NotesView's root used to
+  be `height:100%; overflow:hidden` — that makes the root the sticky element's scroll container, so
+  it never pins. Same reason the tab wrapper's animation is opacity-only (a transform would become
+  the containing block).
+- **A pinned block must stay small.** Pinned headers cost screen height (Notes wraps to two rows below
+  ~1450px; Countdowns' stats + one filter row is ~155px). Countdowns uses `display: contents` on
+  `.cdp-head` at ≤768px so the stat cards scroll away and only `.cdp-filterbar` (now a direct child of
+  the page, so it can still pin) stays.
+- **`Select` is as wide as its wrapper**: `width: style.width || '100%'`. In a wrapping toolbar a
+  `Select` with no `width` becomes a full-row item and forces its own line — pass `style.width`.
+- Dropdowns opened from a pinned header are fine: the header has no `overflow` and the `Select` list
+  has `z-index: 9999` inside the header's own stacking context, so it paints over the scrolling content.
 
 ## Popups, menus and clipping
 

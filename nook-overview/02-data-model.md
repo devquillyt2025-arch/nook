@@ -43,7 +43,7 @@ you rebuild the app, matching these keys and shapes gives you data compatibility
 | `nook_links` | `Link[]` | `LinksView` | synced_items: `links` |
 | `nook_countdowns` | `Countdown[]` | `CountdownsView` | synced_items: `countdowns` |
 | `nook_countdown_pinned` | **raw string** — the pinned countdown's id | `CountdownsView` | synced_items: `countdown_pinned` |
-| `nook_goals` | `Goal[]` — **read-only today** (nothing writes it) | `DailyGoalsView`, `aiContext.js` | synced_items: `goals` |
+| `nook_goals` | `Goal[]` — **read-only today** (nothing writes it) | `trackers/detailedAnalysis.js`, `aiContext.js` | synced_items: `goals` |
 | `nook-calendar-events` | `CalendarEvent[]` (custom events only) | `CalendarView` | synced_items: `calendar_events` |
 | `nook_journal_<YYYY-MM-DD>` | `JournalEntry` — **one key per day** | `JournalView` | synced_items: `journal` |
 | `nook_journal_icons` | `{ [date]: emoji }` mood map | `JournalView` | synced_items: `journal_icons` |
@@ -277,16 +277,16 @@ The pinned countdown's id lives separately in `nook_countdown_pinned` (a raw str
 The Calendar merges **three sources**: tasks with a `dueDate`, these custom events, and
 live Google Calendar events (fetched, not stored — only held transiently in state).
 
-### Goal (`nook_goals`) — `DailyGoalsView` — *read-only today*
+### Goal (`nook_goals`) — *read-only today*
 
 ```js
 { id, title, milestones: [ { id, done } ], manualProgress: 0, /* 0..100 when no milestones */
   category, targetDate, completed, createdAt }
 ```
 
-Progress = `milestones.length ? round(done/total*100) : manualProgress`. The Today
-dashboard shows the first 3 incomplete goals, but **no screen creates or edits goals**
-now; the key is read by `DailyGoalsView` and `aiContext.js` only.
+Progress = `milestones.length ? round(done/total*100) : manualProgress`. **No screen creates
+or edits goals**, and Today no longer shows them; the key is read by the Detailed Analysis and
+`aiContext.js` only.
 
 ### Intentions (`nook-intentions`) — `App.jsx`
 
@@ -300,7 +300,8 @@ now; the key is read by `DailyGoalsView` and `aiContext.js` only.
 
 Rolled over to a new day *in place* at local midnight; the previous day's
 "anything done?" flag is pushed into `history`. (`DailyIntentions.jsx`, the editor for
-these, is no longer imported anywhere; Today only reads the counts.)
+these, is no longer imported anywhere, and Today no longer reads them either — nothing displays
+this key now, though it still rolls over and syncs.)
 
 ### Pomodoro log (`nook-pomo-log`, legacy `nook-analytics`)
 

@@ -112,7 +112,7 @@ If you're about to "clean up" any of these, read that file first.
 - **The empty `else if (localUpdated > gUpdated) {}`** in the task pull is
   deliberate (local already wins; the queued push carries it up).
 - **`FocusCompanion` is intentionally not `memo()`-wrapped**; Chart.js is
-  registered in two files (idempotent); `trackers/insightsEngine.js` is orphaned on
+  registered in three files (idempotent); `trackers/insightsEngine.js` is orphaned on
   purpose (as are a few other unused components — list in 08).
 - **Voice commands, the Chat tab and the Gemini assistant are built but hidden**
   (entry points commented out in `App.jsx`). Uncomment, don't rewrite; the

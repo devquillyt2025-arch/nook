@@ -259,8 +259,7 @@ input, textarea, select { font-family: inherit; }
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   padding: 16px 14px 14px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;   /* the sidebar itself doesn't scroll — .nav-scroll does, so the head stays pinned */
   box-sizing: border-box;
   box-shadow: 2px 0 8px rgba(0,0,0,0.04);
 }
@@ -330,6 +329,23 @@ input, textarea, select { font-family: inherit; }
 }
 
 .main-nav::-webkit-scrollbar { width: 0; }
+
+/* Pinned head (logo + search, with a line under it) and the list that scrolls beneath it.
+   Settings stays pinned at the bottom: .nav-scroll only grows to its content and shrinks —
+   and scrolls — when the window is too short, so a tall window looks exactly as before. */
+.sidebar-head { flex-shrink: 0; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.nav-scroll {
+  flex: 0 1 auto; min-height: 0;
+  /* A flex column, like .main-nav was: the buttons' vertical margins must not collapse, or the
+     whole list packs ~56px tighter than it used to. */
+  display: flex; flex-direction: column;
+  overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: none;
+  /* Reach into .main-nav's own padding, or the active item's glow is clipped at the edges. */
+  margin: 0 -14px; padding: 0 14px 4px;
+}
+.nav-scroll::-webkit-scrollbar { width: 0; }
+.main-nav--rail .nav-scroll { margin: 0 -6px; padding: 0 6px 4px; }
 
 /* ─── Icon-rail collapse ─────────────────────────────────────────── */
 /* Smooth width transition on the sidebar itself */
@@ -2645,6 +2661,106 @@ kbd {
   .ra-kpis { grid-template-columns: 1fr; }
 }
 
+/* ── Notes (.nv-bar) and Links (.lk-bar): pinned toolbar, same pattern as the Activity Log's .al-toolbar ── */
+.nv-bar, .lk-bar {
+  position: sticky; top: 0; z-index: 30;
+  overflow: visible; min-width: 0;
+  background: var(--bg-base);
+  padding: 24px 24px 14px;
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 768px) {
+  .nv-bar { padding: 14px 14px 12px; }
+  .lk-bar { padding: 14px 24px 12px; }   /* the links list below keeps its 24px gutter */
+}
+
+/* ── Reports: Overview / Detailed Analysis switch + the Detailed Analysis view ── */
+.ra-view-switch { display: flex; }
+.da { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 28px; }
+.da .ra-card { min-width: 0; }
+.da-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.da-title { margin: 0 0 4px; font-size: 1.15rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.2px; }
+.da-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -14px; }
+.da-chip {
+  padding: 5px 12px; border-radius: 99px; border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text-secondary); font-family: inherit; font-size: 0.76rem; font-weight: 600; cursor: pointer;
+  transition: color var(--ease), border-color var(--ease);
+}
+.da-chip:hover { color: var(--text-primary); border-color: var(--accent); }
+.da-sec { scroll-margin-top: 12px; min-width: 0; }
+.da-sec-title { font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); margin: 0 0 4px; }
+.da-sec-sub { font-size: 0.76rem; color: var(--text-muted); margin: 0 0 14px; }
+.da-sec-body { display: flex; flex-direction: column; gap: 16px; }
+
+.da-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.da-stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.da-stat-val { font-size: 1.2rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.3px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.da-stat-lbl { font-size: 0.74rem; font-weight: 600; color: var(--text-secondary); margin-top: 3px; }
+.da-stat-hint { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; }
+.da-stat-warn .da-stat-val { color: var(--color-red); }
+
+.da-grid  { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.da-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.da-note  { font-size: 0.72rem; color: var(--text-muted); margin: 10px 0 0; line-height: 1.4; }
+.da-quote { margin: 0; font-family: 'Newsreader', serif; font-style: italic; font-size: 0.98rem; line-height: 1.55; color: var(--text-primary); }
+
+.da-insights { display: flex; flex-direction: column; gap: 8px; }
+.da-insight {
+  display: flex; gap: 11px; align-items: flex-start; padding: 11px 14px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card);
+  font-size: 0.86rem; line-height: 1.45; color: var(--text-primary);
+}
+.da-insight::before { content: ''; flex-shrink: 0; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--accent); }
+.da-insight-good::before { background: var(--color-green); }
+.da-insight-warn::before { background: var(--color-amber); }
+
+.da-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 0.84rem; color: var(--text-secondary); }
+.da-row:last-child { border-bottom: none; }
+.da-row-name { min-width: 0; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.da-row-val { flex-shrink: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.da-cd { margin-top: 10px; }
+.da-cd .da-row { border-bottom: none; padding: 0 0 5px; }
+.da-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.da-tag { padding: 3px 9px; border-radius: 99px; background: var(--bg-elevated); color: var(--text-secondary); font-size: 0.72rem; }
+.da-tag b { margin-left: 3px; color: var(--text-primary); }
+
+.da-hb { display: flex; flex-direction: column; gap: 10px; }
+.da-hb-row { display: grid; grid-template-columns: minmax(64px, 30%) minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 0.82rem; }
+.da-hb-name { min-width: 0; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.da-hb-track { display: flex; height: 8px; min-width: 0; border-radius: 99px; background: var(--ring-track); overflow: hidden; }
+.da-hb-fill { height: 100%; flex-shrink: 0; }
+.da-hb-val { min-width: 3.4em; text-align: right; color: var(--text-secondary); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+
+.da-habits { display: flex; flex-direction: column; gap: 14px; }
+.da-habit { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1.6fr); align-items: center; gap: 14px; }
+.da-habit-name { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.da-habit-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.86rem; color: var(--text-primary); }
+.da-habit-freq { flex-shrink: 0; font-size: 0.68rem; color: var(--text-muted); }
+.da-habit-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; font-size: 0.74rem; color: var(--text-muted); }
+.da-habit-meta strong { color: var(--text-primary); font-size: 0.84rem; }
+
+.da-cols { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.da-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.da-col-track { width: 100%; height: 96px; display: flex; align-items: flex-end; justify-content: center; }
+.da-cols-compact .da-col-track { height: 60px; }
+.da-col-bar { width: 100%; max-width: 38px; min-height: 2px; border-radius: 6px 6px 3px 3px; transition: height 0.3s ease; }
+.da-col-val { height: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.66rem; color: var(--text-muted); }
+.da-col-lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; color: var(--text-secondary); }
+
+@media (max-width: 900px) {
+  .da-grid, .da-grid3 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .da { gap: 24px; }
+  .da-nav { margin-top: -8px; }
+  .da-habit { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .da-habit-meta { justify-content: flex-start; }
+}
+@media (max-width: 480px) {
+  .da-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .da-hb-row { grid-template-columns: minmax(56px, 34%) minmax(0, 1fr) auto; }
+}
+
 /* Ring hero (target / project) */
 .tc-ring-hero { display: flex; align-items: center; gap: 13px; padding: 3px 0; }
 .tc-ring-hero-project { padding-bottom: 6px; }
@@ -4636,8 +4752,20 @@ select.modal-input {
    ═══════════════════════════════════════════════════════════════════ */
 .cdp-page {
   width: 100%; max-width: 1320px; margin: 0 auto; box-sizing: border-box;
-  padding: 22px 24px 44px;
+  /* No top padding: the sticky .cdp-head is the first child and supplies its own, so
+     it starts flush at the scroll-container top instead of sliding up before pinning. */
+  padding: 0 24px 44px;
   display: flex; flex-direction: column; gap: 16px;
+}
+
+/* Stat cards + filters stay pinned while the countdowns scroll beneath, with a line
+   under them — same pattern as the Activity Log's .al-toolbar. */
+.cdp-head {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; flex-direction: column; gap: 12px;
+  background: var(--bg-base);
+  padding: 24px 0 14px;
+  border-bottom: 1px solid var(--border);
 }
 
 .cdp-hdr { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -4677,6 +4805,7 @@ select.modal-input {
   padding: 8px 14px; background: transparent; border: 1px solid transparent;
   border-radius: 12px;
 }
+.cdp-head .cdp-filterbar { padding: 0; }   /* the head owns the spacing; flush with the stat cards so the filters fit one row */
 .cdp-filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cdp-filter-label { font-size: 0.66rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
 .cdp-count-label { font-size: 0.76rem; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
@@ -4927,12 +5056,20 @@ select.modal-input {
 .cdp-delete-btn:hover { background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.48); }
 
 @media (max-width: 768px) {
-  .cdp-page    { padding: 16px 14px 40px; gap: 12px; }
-  .cdp-stats   { grid-template-columns: repeat(2, 1fr); }
+  .cdp-page    { padding: 0 14px 40px; gap: 12px; }
+  .cdp-stats   { grid-template-columns: repeat(2, 1fr); margin-top: 16px; }
   .cdp-grid    { grid-template-columns: 1fr; }
   .cdp-empty   { padding: 28px 16px 20px; gap: 10px; }
   .cdp-filterbar { padding: 6px 8px; gap: 8px; }
   .cdp-filter-group { gap: 6px; }
+  /* On a phone the stat cards alone are ~230px — pinned with the filters they'd cover
+     half the screen. Let the head dissolve so the cards scroll away and only the filter
+     bar (a direct child of .cdp-page again) stays pinned, still with its line. */
+  .cdp-head { display: contents; }
+  .cdp-filterbar, .cdp-head .cdp-filterbar {
+    position: sticky; top: 0; z-index: 30;
+    background: var(--bg-base); padding: 12px 0; border-bottom: 1px solid var(--border);
+  }
 }
 @media (max-width: 480px) {
   .cdp-stats { grid-template-columns: repeat(2, 1fr); }
@@ -6046,8 +6183,14 @@ select.modal-input {
 
 /* Activity Log's toolbar is position:sticky. Drop the tab shell's top padding so
    the toolbar starts flush at the scroll-container top — otherwise it travels the
-   32px of padding upward before pinning, which reads as "moving on first scroll". */
-.sunsama-tab-transition.activity-tab-active {
+   32px of padding upward before pinning, which reads as "moving on first scroll".
+   Notes (.nv-bar), Links (.lk-bar), Countdowns (.cdp-head) and Today (.today-head, whose shell class
+   is yartu-tab-active) pin their headers the same way. */
+.sunsama-tab-transition.activity-tab-active,
+.sunsama-tab-transition.notes-tab-active,
+.sunsama-tab-transition.links-tab-active,
+.sunsama-tab-transition.countdowns-tab-active,
+.sunsama-tab-transition.yartu-tab-active {
   padding-top: 0;
 }
 
@@ -6388,24 +6531,86 @@ select.modal-input {
   box-shadow: 0 2px 10px rgba(120,105,252,0.3);
 }
 
-.today-3col-grid {
+/* Today's greeting + summary + Viewing/Editing toggle stay pinned, with a line under them, while the
+   charts and cards scroll beneath — the same pattern as the other pinned headers. The card is trimmed
+   while pinned so it doesn't eat the screen (it was ~25% of a laptop, ~35% of a phone). */
+.today-head {
+  position: sticky; top: 0; z-index: 30;
+  background: var(--bg-base);
+  padding: 20px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.today-head .yartu-greeting-row { padding: 14px 24px; }
+@media (max-width: 768px) {
+  /* On a phone: no "Today you have:" label, the four counts in a 2×2 grid, a slim toggle, no caption. */
+  .today-head { padding: 10px 0; }
+  .today-head .yartu-greeting-row { padding: 10px 12px; gap: 8px; border-radius: 12px; }
+  .today-head .yartu-greeting-title { font-size: 0.95rem; }
+  .today-head .yartu-greeting-left { gap: 4px; }
+  .today-head .yartu-summary-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; margin-top: 0; font-size: 0.8rem; }
+  .today-head .yartu-summary-prefix, .today-head .yartu-summary-divider { display: none; }
+  .today-head .yartu-summary-item { min-width: 0; white-space: normal; }
+  .today-head .yartu-greeting-row > div:last-child > span { display: none; }
+  .today-head .yartu-mode-toggle { padding: 2px; border-radius: 10px; }
+  .today-head .yartu-mode-btn { padding: 4px 10px; font-size: 0.78rem; border-radius: 8px; }
+}
+
+/* Today: a row of three small charts, then the cards you act on. */
+.today-charts {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.25fr) minmax(0, 1.45fr);
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 24px;
+  width: 100%;
+  align-items: stretch;
+  box-sizing: border-box;
+}
+.today-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 24px;
   width: 100%;
   align-items: start;
   box-sizing: border-box;
 }
-@media (max-width: 1280px) {
-  .today-3col-grid {
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr);
-  }
+@media (max-width: 900px) {
+  .today-actions { grid-template-columns: minmax(0, 1fr); }
 }
+/* On a phone the actions matter more than the trend charts: today's donut first, then the
+   cards you act on, then the 7-day bars and the category pie. (.today-charts dissolves so its
+   cards become flex items of the column and can be ordered.) */
 @media (max-width: 768px) {
-  .today-3col-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  .today-charts { display: contents; }
+  .tc-donut-card { order: 1; }
+  .today-actions { order: 2; }
+  .tc-week-card, .tc-pie-card { order: 3; }
 }
+
+/* Chart internals (components/TodayCharts.jsx) */
+.tc-card-sub { font-size: 0.8rem; color: var(--text-secondary); }
+.tc-foot { font-size: 0.74rem; color: var(--text-muted); }
+.tc-empty { margin: 0; padding: 18px 4px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+.tc-donut-wrap { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.tc-donut { position: relative; flex-shrink: 0; display: grid; place-items: center; width: 132px; height: 132px; border-radius: 50%; }
+.tc-donut-hole { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 98px; height: 98px; border-radius: 50%; background: var(--surface-panel); }
+.tc-donut-pct { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--text-primary); }
+.tc-donut-sub { font-size: 0.7rem; color: var(--text-muted); }
+.tc-pie { flex-shrink: 0; display: grid; place-items: center; width: 124px; height: 124px; border-radius: 50%; }
+.tc-pie-hole { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 82px; height: 82px; border-radius: 50%; background: var(--surface-panel); }
+.tc-legend { flex: 1; min-width: 110px; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem; color: var(--text-secondary); }
+.tc-legend li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tc-legend b { margin-left: auto; padding-left: 8px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.tc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-legend-row { flex: none; flex-direction: row; gap: 16px; margin-top: 10px; }
+.tc-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 3px; }
+.tc-bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; height: 150px; }
+.tc-bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; min-width: 0; }
+.tc-bar-total { height: 14px; font-size: 0.68rem; color: var(--text-muted); }
+.tc-bar-track { flex: 1; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.tc-bar-stack { display: flex; flex-direction: column; width: 100%; max-width: 34px; overflow: hidden; border-radius: 6px; }
+.tc-seg { min-height: 0; }
+.tc-bar-day { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); }
+.tc-bar-num { font-size: 0.78rem; color: var(--text-secondary); }
+.tc-bar-col.is-today .tc-bar-day, .tc-bar-col.is-today .tc-bar-num { font-weight: 700; color: var(--accent); }
 
 .tasks-2col-grid {
   display: grid;

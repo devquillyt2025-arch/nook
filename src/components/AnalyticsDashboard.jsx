@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import DateInput from './DateInput';
+import { useMemo } from 'react';
+import ReportRangeControl from './ReportRangeControl';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -31,14 +31,12 @@ ChartJS.register(
 
 // Reports = read-only cross-tab analytics over the real tabs: Habits, Tasks,
 // Focus and Journal. No trackers.
-export default function AnalyticsDashboard({ habits = [], tasks = [], pomodoroLog = [] }) {
+export default function AnalyticsDashboard({ habits = [], tasks = [], pomodoroLog = [], range, onRangeChange }) {
   const todayStr = getTodayStr();
 
   // ── Time range + same-length previous-period comparison ──
-  const [rangeMode, setRangeMode] = useState('week'); // 'week' | 'month' | 'custom'
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
-  const { start, end, prevStart, prevEnd, label } = rangeBounds(rangeMode, customStart, customEnd);
+  // The range lives in ReportsView so the Detailed Analysis view shares it.
+  const { start, end, prevStart, prevEnd, label } = rangeBounds(range.mode, range.customStart, range.customEnd);
 
   const R = useMemo(() => {
     const habitCur  = habitRangeStats(habits, start, end);
@@ -173,18 +171,7 @@ export default function AnalyticsDashboard({ habits = [], tasks = [], pomodoroLo
         <div className="ra-period-head">
           <h2 className="analytics-section-title" style={sectionTitle}>Period Overview</h2>
           <div className="ra-range-ctl no-print">
-            <div className="ra-seg" role="group" aria-label="Time range">
-              {[['week', 'This Week'], ['month', 'This Month'], ['custom', 'Custom']].map(([m, l]) => (
-                <button key={m} className={rangeMode === m ? 'ra-seg-on' : ''} onClick={() => setRangeMode(m)} aria-pressed={rangeMode === m}>{l}</button>
-              ))}
-            </div>
-            {rangeMode === 'custom' && (
-              <div className="ra-custom">
-                <DateInput value={customStart} max={customEnd || undefined} onChange={e => setCustomStart(e.target.value)} aria-label="Start date" />
-                <span>→</span>
-                <DateInput value={customEnd} min={customStart || undefined} onChange={e => setCustomEnd(e.target.value)} aria-label="End date" />
-              </div>
-            )}
+            <ReportRangeControl range={range} onChange={onRangeChange} />
             <div className="header-actions no-print" style={{ display: 'flex', gap: 8 }}>
               <button className="ra-icon-btn" onClick={printDashboard} title="Export PDF" aria-label="Export PDF">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"/></svg>
@@ -365,14 +352,15 @@ function ConsistencyHeatmap({ cells }) {
 }
 
 // ─── Comparison helper components ──────────────────────────────────
-function DeltaBadge({ d, unit = '', periodLabel }) {
+export function DeltaBadge({ d, unit = '', periodLabel }) {
+  if (!d) return null;   // no previous-period value to compare against
   const cls   = d.dir === 'up' ? 'ra-up' : d.dir === 'down' ? 'ra-down' : 'ra-flat';
   const arrow = d.dir === 'up' ? '↑' : d.dir === 'down' ? '↓' : '→';
   const body  = d.dir === 'flat' ? 'no change' : `${arrow} ${Math.abs(d.diff)}${unit}`;
   return <span className={`ra-delta ${cls}`}>{body} <span className="ra-delta-vs">vs last {periodLabel}</span></span>;
 }
 
-function KpiTile({ label, value, sub, d, unit = '', periodLabel }) {
+export function KpiTile({ label, value, sub, d, unit = '', periodLabel }) {
   return (
     <div className="ra-kpi">
       <div className="ra-kpi-val">{value}</div>

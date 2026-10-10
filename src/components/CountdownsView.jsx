@@ -213,6 +213,8 @@ export default memo(function CountdownsView() {
 
   return (
     <div className="cdp-page">
+      {/* Pinned header: the stats and filters stay put while the countdowns scroll under them */}
+      <div className="cdp-head">
       <div className="cdp-stats">
         <StatCard icon={<CdIcoLayers />} label="Total" value={totalCount} sub="All time" />
         <StatCard icon={<CdIcoActivity />} label="Active" value={activeCount} sub="In progress" />
@@ -243,13 +245,14 @@ export default memo(function CountdownsView() {
           </div>
           <div className="cdp-filter-group">
             <span className="cdp-filter-label">Sort</span>
-            <Select value={sortBy} onChange={e => setSortBy(e.target.value)} options={sortOptions} style={{ ...SELECT_PILL_STYLE, width: 150 }} />
+            <Select value={sortBy} onChange={e => setSortBy(e.target.value)} options={sortOptions} style={{ ...SELECT_PILL_STYLE, width: 130 }} />
             <span className="cdp-count-label">{finalList.length} of {totalCount} shown</span>
             {/* Add Countdown — primary action, moved here from the removed page header */}
             <button className="add-task-btn" onClick={() => setShowModal(true)}>＋ Add Countdown</button>
           </div>
         </div>
       )}
+      </div>
 
       {countdowns.length === 0 ? (
         <div className="cdp-empty">
