@@ -1521,6 +1521,9 @@ export default function App() {
         role="navigation"
         aria-label="Main navigation"
       >
+        {/* Pinned head — logo + search stay put (with a line under them) while the nav list
+            below scrolls. .main-nav itself no longer scrolls; .nav-scroll does. */}
+        <div className="sidebar-head">
         {/* Brand row — logo + name + toggle button */}
         <div className="sidebar-brand">
           <img 
@@ -1553,7 +1556,10 @@ export default function App() {
           <SidebarSearch tasks={tasks} habits={habits} setActiveTab={setActiveTab} onQueryChange={setSearchQuery} />
           {/* <VoiceCommandButton tasks={tasks} addTask={addTask} toggleComplete={toggleComplete} showToast={showToast} /> */}
         </div>
+        </div>
 
+        {/* Scrollable list — Main / More / Utility. Settings below stays pinned to the bottom. */}
+        <div className="nav-scroll">
         {/* ── Section: Main ── */}
         <span className="nav-section-label">Main</span>
         {[
@@ -1624,6 +1630,7 @@ export default function App() {
             <span className="nav-label">{tab.label}</span>
           </button>
         ))}
+        </div>
 
         <div className="nav-spacer" />
         <div className="nav-settings-separator" />

@@ -59,7 +59,16 @@ The sidebar is an **always-mounted icon rail**, not a mount/unmount toggle:
   **`MutationObserver`** (not a media query) so the search trigger collapses in
   sync with the JS toggle.
 - CSS-only tooltips: `data-tooltip` + `::after` pseudo-element with
-  `transition-delay: 0.3s`.
+  `transition-delay: 0.3s`. (Nothing sets `data-tooltip` today, and `.main-nav` clips overflow, so
+  they never actually show — the rail items use `title`.)
+- **Pinned head, scrolling list.** `.main-nav` itself doesn't scroll (`overflow: hidden`). The logo
+  row and the search sit in `.sidebar-head` — pinned, with a line under it; Main / More / Utility sit
+  in `.nav-scroll`, the only part that scrolls (scrollbar hidden, wheel / keyboard focus still work);
+  Settings sits below it, pinned to the bottom. `.nav-scroll` is `flex: 0 1 auto`, so it only shrinks
+  (and scrolls) when the window is too short — a tall window looks as it always did. Two traps:
+  it must be a **flex column** (as a plain block the buttons' `margin: 3px 0` collapses and the list
+  packs ~56px tighter), and its box reaches into `.main-nav`'s padding (negative margin + matching
+  padding; 6px in the rail) or the active item's glow is clipped at the edges.
 - **Mobile (≤768px):** `.main-nav` is `display:none` regardless of state; the
   mobile bottom nav handles navigation. Do not change this.
 
