@@ -2,7 +2,7 @@ import { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
 import { useSyncApplied } from '../utils/useSyncApplied';
-import { NOTES_STORAGE_KEY, loadNotes, newNote, saveNote as storeSaveNote } from '../utils/notesStore';
+import { NOTES_STORAGE_KEY, loadNotes, newNote, addedAt, saveNote as storeSaveNote } from '../utils/notesStore';
 import Select from './Select';
 import ErrorBoundary from './ErrorBoundary';
 import { sameDay, startOfDay, endOfDay } from '../utils/date';
@@ -493,7 +493,7 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
   const [notes,       setNotes]       = useState(loadNotes);
   // Another device edited notes: re-read what the sync engine merged into storage.
   useSyncApplied(['notes'], () => setNotes(loadNotes()));
-  const [sortOrder,   setSortOrder]   = useState('updated');
+  const [sortOrder,   setSortOrder]   = useState('added');   // 'added' (newest first) | 'oldest' | 'alpha' — nothing sets it today
   const [activeTag,   setActiveTag]   = useState(null);
   const [activeColor, setActiveColor] = useState(null);
   const [viewMode,    setViewMode]    = useState('grid'); // 'grid' | 'list'
@@ -614,9 +614,11 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
       result = result.filter(n => new Date(n.updatedAt) <= eOfDay);
     }
     
+    // By when the note was added, not last edited: a note keeps its place when it's opened,
+    // edited, recoloured or pinned (see addedAt in notesStore). New notes land first.
     if (sortOrder === 'alpha') result.sort((a,b) => (a.title || '').localeCompare(b.title || ''));
-    else if (sortOrder === 'oldest') result.sort((a,b) => new Date(a.updatedAt) - new Date(b.updatedAt));
-    else result.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    else if (sortOrder === 'oldest') result.sort((a,b) => addedAt(a) - addedAt(b));
+    else result.sort((a,b) => addedAt(b) - addedAt(a));
     
     return result;
   }, [notes, localSearchQuery, globalSearchQuery, activeTag, activeColor, sortOrder, dateRange]);

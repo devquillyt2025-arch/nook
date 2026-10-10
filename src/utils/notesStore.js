@@ -34,6 +34,16 @@ export function newNote(overrides = {}) {
   };
 }
 
+// When a note was ADDED, in ms. The Notes list is ordered by this — not by `updatedAt`,
+// which every edit, recolour or pin restamps (cross-device sync's last-write-wins needs
+// that) and which the editor also restamps on close even if nothing changed, so sorting
+// on it made a note jump to the top just for being opened. Falls back to the id
+// (Date.now() at creation) for a note with no usable createdAt; 0 if neither parses.
+export function addedAt(note) {
+  const t = Date.parse(note?.createdAt);
+  return Number.isFinite(t) ? t : (Number(note?.id) || 0);
+}
+
 // Create-or-update, read-modify-write against whatever is currently on disk
 // (not a caller-held array — the caller may be mounted somewhere that never
 // synced with the latest NotesView state, or NotesView may not be mounted at
