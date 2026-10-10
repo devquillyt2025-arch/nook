@@ -447,18 +447,19 @@ export default memo(function LinksView() {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'transparent', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', background: 'transparent' }}>
       <style>{`
         @media (max-width: 768px) {
-          .links-toolbar { flex-wrap: wrap !important; }
           .links-toolbar .links-search { max-width: 100% !important; }
           .links-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
-      {/* ── Toolbar ── */}
-      <div style={{ padding: '16px 24px 16px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0, marginBottom: 16 }}>
-        <div className="links-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+      {/* ── Toolbar — pinned (position:sticky, see .lk-bar) while the links scroll under it.
+          The root above must not set overflow/height: either would turn it into the sticky
+          bar's scroll container and stop it pinning to the tab's scroll area. ── */}
+      <div className="lk-bar">
+        <div className="links-toolbar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, width: '100%' }}>
 
           {/* Search */}
           <div className="links-search" style={{ position: 'relative', width: 280, flexShrink: 0 }}>
@@ -492,7 +493,7 @@ export default memo(function LinksView() {
       </div>
 
       {/* ── Content ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 24px 24px', scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 24px 24px', scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent' }}>
         <div style={{ width: '100%' }}>
 
           {links.length === 0 ? (
