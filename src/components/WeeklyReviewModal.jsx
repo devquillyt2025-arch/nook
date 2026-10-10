@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { computeGlobalStats, computeHabitStreaks } from '../trackers/trackerUtils';
-import { calculateDailyScore } from '../trackers/analyticsUtils';
-import { todayStr as getTodayStr } from '../utils/date';
+import { rangeBounds, habitRangeStats, perHabitConsistency, tasksDoneInRange, focusInRange, delta } from '../trackers/reportsAnalytics';
 import Select from './Select';
 
-export default function WeeklyReviewModal({ trackers, tasks, pomodoroLog, onClose, onSave }) {
+// The summary step and the habit picker read the REAL Habits / Tasks / Focus data, with the
+// same maths as Reports. (They used to read the legacy `nook-trackers`, so anyone on the current
+// Habits tab saw zeros and "No habits found." `trackers` is now only needed for legacy targets.)
+export default function WeeklyReviewModal({ trackers = [], habits = [], tasks, pomodoroLog, onClose, onSave }) {
   const [step, setStep] = useState(1);
   
   // Reflection state
@@ -18,29 +19,17 @@ export default function WeeklyReviewModal({ trackers, tasks, pomodoroLog, onClos
   const [selectedHabits, setSelectedHabits] = useState([]);
   const [selectedTarget, setSelectedTarget] = useState('');
 
-  // Auto-generated summary stats
-  const globalStats = computeGlobalStats(trackers);
-  let bestTracker = null;
-  let worstTracker = null;
-  let bestScore = -1;
-  let worstScore = Infinity;
-
-  trackers.forEach(t => {
-    if (t.type === 'habit') {
-      const stats = computeHabitStreaks(t);
-      if (stats.successRate > bestScore) {
-        bestScore = stats.successRate;
-        bestTracker = t;
-      }
-      if (stats.successRate < worstScore) {
-        worstScore = stats.successRate;
-        worstTracker = t;
-      }
-    }
-  });
-
-  const todayStr = getTodayStr();
-  const todayScore = calculateDailyScore(trackers, tasks, pomodoroLog, todayStr);
+  // Auto-generated summary: the last 7 days against the 7 before them
+  const r = rangeBounds('week');
+  const habitNow = habitRangeStats(habits, r.start, r.end), habitPrev = habitRangeStats(habits, r.prevStart, r.prevEnd);
+  const tasksNow = tasksDoneInRange(tasks, r.start, r.end), tasksPrev = tasksDoneInRange(tasks, r.prevStart, r.prevEnd);
+  const focusNow = focusInRange(pomodoroLog, r.start, r.end), focusPrev = focusInRange(pomodoroLog, r.prevStart, r.prevEnd);
+  const ranked = perHabitConsistency(habits, r.start, r.end).filter(h => h.due > 0);   // best first
+  const bestHabit = ranked[0] || null;
+  const worstHabit = ranked.length > 1 ? ranked[ranked.length - 1] : null;
+  const vsPrev = (cur, prev, unit = '') => { const d = delta(cur, prev); return d.dir === 'flat' ? 'same as the week before' : `${d.dir === 'up' ? '↑' : '↓'} ${Math.abs(d.diff)}${unit} vs the week before`; };
+  const pickableHabits = habits.filter(h => !h.archived);
+  const targets = trackers.filter(t => t.type === 'target');   // legacy: nothing creates these any more
 
   const toggleHabit = (id) => {
     setSelectedHabits(prev => {
@@ -91,35 +80,38 @@ export default function WeeklyReviewModal({ trackers, tasks, pomodoroLog, onClos
           {/* Step 1: Summary */}
           {step === 1 && (
             <div className="review-step">
-              <h4 style={{ marginBottom: 16 }}>Step 1: Last Week's Summary</h4>
+              <h4 style={{ marginBottom: 16 }}>Step 1: Your last 7 days</h4>
               <div className="detail-stats-grid">
                 <div className="stat-card">
-                  <div className="stat-val">{globalStats.perfectDaysMonth}</div>
-                  <div className="stat-lbl">Perfect Days (Month)</div>
+                  <div className="stat-val">{tasksNow}</div>
+                  <div className="stat-lbl">Tasks completed</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>{vsPrev(tasksNow, tasksPrev)}</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-val">{globalStats.bestStreak}</div>
-                  <div className="stat-lbl">Best Streak</div>
+                  <div className="stat-val">{habitNow.due ? `${habitNow.rate}%` : '—'}</div>
+                  <div className="stat-lbl">Habit completion</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>{habitNow.due && habitPrev.due ? vsPrev(habitNow.rate, habitPrev.rate, 'pt') : `${habitNow.done}/${habitNow.due} scheduled`}</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-val">{todayScore}</div>
-                  <div className="stat-lbl">Today's Score</div>
+                  <div className="stat-val">{focusNow.sessions}</div>
+                  <div className="stat-lbl">Focus sessions</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>{vsPrev(focusNow.sessions, focusPrev.sessions)}</div>
                 </div>
               </div>
-              
+
               <div style={{ marginTop: 24, display: 'flex', gap: 16 }}>
-                {bestTracker && (
+                {bestHabit && (
                   <div style={{ flex: 1, background: 'var(--color-green-bg)', padding: 16, borderRadius: 12 }}>
                     <h5 style={{ color: 'var(--color-green)', marginBottom: 8 }}>🏆 Top Performing</h5>
-                    <p style={{ fontWeight: 600 }}>{bestTracker.name}</p>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{bestScore}% success rate</p>
+                    <p style={{ fontWeight: 600 }}>{bestHabit.name}</p>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{bestHabit.rate}% ({bestHabit.done}/{bestHabit.due})</p>
                   </div>
                 )}
-                {worstTracker && worstTracker.id !== bestTracker?.id && (
+                {worstHabit && (
                   <div style={{ flex: 1, background: 'var(--color-red-bg)', padding: 16, borderRadius: 12 }}>
                     <h5 style={{ color: 'var(--color-red)', marginBottom: 8 }}>⚠️ Needs Attention</h5>
-                    <p style={{ fontWeight: 600 }}>{worstTracker.name}</p>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{worstScore}% success rate</p>
+                    <p style={{ fontWeight: 600 }}>{worstHabit.name}</p>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{worstHabit.rate}% ({worstHabit.done}/{worstHabit.due})</p>
                   </div>
                 )}
               </div>
@@ -167,29 +159,31 @@ export default function WeeklyReviewModal({ trackers, tasks, pomodoroLog, onClos
               <div className="form-group">
                 <label>Pick 3 habits to prioritize ({selectedHabits.length}/3)</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 150, overflowY: 'auto', padding: 8, background: 'var(--bg-hover)', borderRadius: 8 }}>
-                  {trackers.filter(t => t.type === 'habit').map(t => (
-                    <label key={t.id} className="custom-checkbox-wrapper">
-                      <input type="checkbox" checked={selectedHabits.includes(t.id)} onChange={() => toggleHabit(t.id)} disabled={!selectedHabits.includes(t.id) && selectedHabits.length >= 3} />
-                      {t.name}
+                  {pickableHabits.map(h => (
+                    <label key={h.id} className="custom-checkbox-wrapper">
+                      <input type="checkbox" checked={selectedHabits.includes(h.id)} onChange={() => toggleHabit(h.id)} disabled={!selectedHabits.includes(h.id) && selectedHabits.length >= 3} />
+                      {h.name}
                     </label>
                   ))}
-                  {trackers.filter(t => t.type === 'habit').length === 0 && <span style={{ color: 'var(--text-muted)' }}>No habits found.</span>}
+                  {pickableHabits.length === 0 && <span style={{ color: 'var(--text-muted)' }}>No habits yet — add some in the Habits tab.</span>}
                 </div>
               </div>
 
-              <div className="form-group" style={{ marginTop: 16 }}>
-                <label>Set one target to focus on</label>
-                <Select 
-                  className="modal-input" 
-                  value={selectedTarget} 
-                  onChange={e => setSelectedTarget(e.target.value)}
-                  options={[
-                    { value: '', label: '-- Select a target --' },
-                    ...trackers.filter(t => t.type === 'target').map(t => ({ value: t.id, label: t.name })),
-                  ]}
-                />
-                {trackers.filter(t => t.type === 'target').length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 4 }}>No targets found.</span>}
-              </div>
+              {/* Targets are a legacy tracker type nothing creates any more — only offer them if some still exist. */}
+              {targets.length > 0 && (
+                <div className="form-group" style={{ marginTop: 16 }}>
+                  <label>Set one target to focus on</label>
+                  <Select
+                    className="modal-input"
+                    value={selectedTarget}
+                    onChange={e => setSelectedTarget(e.target.value)}
+                    options={[
+                      { value: '', label: '-- Select a target --' },
+                      ...targets.map(t => ({ value: t.id, label: t.name })),
+                    ]}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

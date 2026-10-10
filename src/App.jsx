@@ -1926,7 +1926,7 @@ export default function App() {
         {openModal==='weekly-review' && (
           <WeeklyReviewModal
             key="weekly-review"
-            trackers={trackers} tasks={tasks} pomodoroLog={pomodoroLog}
+            trackers={trackers} habits={habits} tasks={tasks} pomodoroLog={pomodoroLog}
             onClose={() => setOpenModal(null)}
             onSave={(reviewData) => {
               let currentReviews = [];
