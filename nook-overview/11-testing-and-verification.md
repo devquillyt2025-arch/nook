@@ -24,6 +24,8 @@ vitest config. Everything is colocated as `*.test.js`:
 | `trackers/trackerUtils.test.js` | 6 | Deterministic `dedupeTrackers` (oldest `createdAt`, then id) |
 | `components/themedControls.test.js` | 4 | **Fails if a native `<select>` or `<input type="date\|time\|…">` appears in any `.jsx`**; plus date/time display formatting (incl. DST days) |
 | `utils/voiceCommandMatch.test.js` | 11 | The `complete_task` match-count gate that decides auto-execute ([10](10-ai-voice-chat.md)) |
+| `utils/notesStore.test.js` | 9 | Notes keep their list position: `addedAt()` ordering, and that editing / opening-and-closing / recolouring a note (all restamp `updatedAt`) never reorders it while a new note lands first |
+| `trackers/detailedAnalysis.test.js` | 42 | The Reports → Detailed Analysis maths with the clock pinned to Sat 2026-10-10: every section's numbers, agreement with the Overview's own helpers (`tasksDoneInRange`, `habitRangeStats`, `focusInRange`, `journalCountInRange`, `dailyScoreH`), tie-breaks that must not depend on storage order, range clamping / future days, malformed dates and sources (no `NaN`) |
 
 The engine suite is grouped by failure mode, which is how to read it before changing the
 engine: *basic two-device sync · the whole-blob failure mode this replaces · a local edit not

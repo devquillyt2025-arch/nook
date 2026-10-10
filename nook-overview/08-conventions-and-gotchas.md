@@ -120,7 +120,7 @@ timer runs, which is why it *looks* safe and isn't.
 ## Chart.js registers itself where it is used
 
 `AnalyticsDashboard` calls `ChartJS.register(...)` for exactly the components it draws
-(the unused `TrackerCharts.jsx` does the same). `register()` is idempotent, so any overlap
+(`DetailedAnalysis.jsx` and the unused `TrackerCharts.jsx` do the same). `register()` is idempotent, so any overlap
 is harmless. Don't move registration to one shared point (that regression previously made
 `AnalyticsDashboard` work only by import-order luck).
 

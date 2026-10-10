@@ -18,7 +18,7 @@ is **not** 1:1 — two ids read differently in the UI: `daily`→"Today",
 | `timer` | Focus | Pomodoro + focus companion | `Timer`, `FocusCompanion`, `utils/timerTickStore.js` | `nook-pomo-log` (legacy `nook-analytics`) |
 | `links` | Links | Bookmarks + categories + favourites | `LinksView` | `nook_links` |
 | `countdowns` | Countdowns | Date countdowns, milestones, pinning | `CountdownsView` | `nook_countdowns`, `nook_countdown_pinned` |
-| `reports` | Reports | **Read-only** analytics dashboard | `ReportsView` → `AnalyticsDashboard`, `trackers/reportsAnalytics.js` | reads habits, tasks, pomodoro log, journal, weekly reviews |
+| `reports` | Reports | **Read-only** analytics: an Overview and a Detailed Analysis | `ReportsView` → `AnalyticsDashboard` (Overview), `DetailedAnalysis`; maths in `trackers/reportsAnalytics.js` and `trackers/detailedAnalysis.js` | reads habits, tasks, pomodoro log, journal, weekly reviews — and, for the Detailed Analysis, notes, links, countdowns, calendar events, goals, the activity log and custom categories |
 | `activity` | Activity Log | Cross-module audit trail | `ActivityLogView`, `utils/activityLog.js` | `nook-activity-log` |
 | `settings` | Settings | Profile, notifications, integrations, backup, sync status | `SettingsView`, `utils/backup.js`, `driveBackup.js` | `nook-settings`, `nook-profile-*`, `nook-notif-*`, `nook-theme`, `nook-week-start` |
 
@@ -102,7 +102,17 @@ user — the task/event remains the source of truth for its content.
 Grid of colour-coded rich-text notes with pin + tags, search, tag/colour/date-range
 filters and grid/list views. `NoteModal` (a lazy named export of `NotesView`, hosted by
 `App.jsx`) is the editor. Includes a one-time content-dedup migration for a specific
-historical corruption pattern. Deleting a note asks for confirmation.
+historical corruption pattern. Deleting a note asks for confirmation. **Order:** notes are listed
+newest-*added* first (`addedAt()` in `utils/notesStore.js` — `createdAt`, falling back to the id),
+**not** by last edit, so a note keeps its place when it's opened, edited, recoloured or pinned (a
+brand-new note lands first). Don't sort by `updatedAt`: the editor's `handleSave` restamps it on
+every close **even if nothing changed** (so merely opening a note used to fling it to the top), and
+sync's last-write-wins needs `updatedAt` to keep moving. The Date Range filter still filters on
+`updatedAt` (last modified). The toolbar (search,
+New Note, colour palette, tags, date range, view toggle, count) is **pinned** (`.nv-bar`) with a
+line under it while the notes scroll beneath — the Activity Log pattern, see
+[06 § Pinned headers](06-ui-and-styling.md#pinned-headers-sticky-toolbars). It wraps onto a
+second row on narrower screens instead of clipping.
 
 ### Focus (`timer`)
 Pomodoro timer (focus / short / long / custom durations from settings, long break
@@ -115,11 +125,18 @@ background-tab throttling can't drift it.
 
 ### Links (`links`)
 Bookmark manager: categories (a custom dropdown for the filter, the themed `Select` in
-the add/edit modal), auto-fetched favicons, and starring favourites.
+the add/edit modal), auto-fetched favicons, and starring favourites. The toolbar (search,
+Add Link, grid/list toggle, category filter, count) is **pinned** (`.lk-bar`) with a line under
+it while the links scroll beneath, and wraps onto more rows when narrow
+([06 § Pinned headers](06-ui-and-styling.md#pinned-headers-sticky-toolbars)). Favicon lookups
+for unknown domains 404 at Google's service — harmless console noise.
 
 ### Countdowns (`countdowns`)
 Countdown-to-date cards with category colours, priority and milestones; pinned
-countdowns surface first. Start/end/milestone dates use the themed `DateInput`.
+countdowns surface first. Start/end/milestone dates use the themed `DateInput`. The stat
+cards and the filter row are **pinned** together (`.cdp-head`) with a line under them while the
+cards scroll beneath ([06 § Pinned headers](06-ui-and-styling.md#pinned-headers-sticky-toolbars)).
+At ≤768px only the filter row stays pinned — the stat cards alone are ~230px and scroll away.
 
 ### Reports (`reports`)
 A **read-only** analytics dashboard (`AnalyticsDashboard`, maths in
@@ -131,6 +148,42 @@ category, a 12-week **Consistency Heatmap**, and the **Weekly Review Journal**. 
 "Weekly Review" flow (`WeeklyReviewModal`, opened from Today) writes `nook-weekly-reviews`.
 There is a print-to-PDF button. `AnalyticsDashboard` registers the Chart.js components
 it needs itself (`register()` is idempotent — don't centralise it).
+
+A switch at the top of Reports flips between that **Overview** and a **Detailed Analysis**
+(`DetailedAnalysis.jsx`). `ReportsView` owns the time range (`{mode, customStart, customEnd}`,
+rendered by `ReportRangeControl`) and hands it to both, so switching keeps the period.
+The Detailed Analysis walks every tab over that range, each with the previous same-length
+period alongside: **Highlights** (plain-language readouts), **At a glance**, **Tasks**
+(created vs completed, overdue, on-time rate, cycle time, category / priority / weekday,
+estimated vs logged time), **Habits** (per-habit consistency with streaks and trend, weekday
+and time-of-day patterns, perfect days, needs-attention), **Focus** (by day / hour / part of
+day, streaks), **Journal** (words, coverage, streaks, mood), **Notes, links & countdowns**,
+**Calendar** (custom events + goals), **Activity**, **Productivity score**, **Weekly
+reviews**, and **All time** (ignores the range). All the maths is the pure
+`buildAnalysis()` in `trackers/detailedAnalysis.js`; it reuses `reportsAnalytics.js` for every
+number the Overview also shows, so the two can't disagree (one deliberate difference: the
+Analysis prints focus time as `4h 10m` where the Overview prints `4.2h`). Notes:
+- It reads the non-prop slices straight from localStorage (`loadAnalysisSources`) and
+  re-reads them through `useSyncApplied` when another device's change lands.
+- Ranges over 731 days are clamped to the most recent 731 (flagged in the header) — anchored on
+  *today*, not on a custom end date that's still in the future, and never reaching back before the
+  start that was picked; anything over 45 days is bucketed weekly so charts stay readable.
+- Dates are read strictly as `YYYY-MM-DD` (`ymd` / `isoDay` in `detailedAnalysis.js`): a malformed
+  due date, countdown end date or timestamp counts as "no date" instead of turning into `NaN`
+  ("NaN days late"). A countdown with no usable end date is counted but never placed on the timeline.
+- The **Productivity score** section shows an empty state until there's something to score:
+  `dailyScoreH` otherwise awards 50 free habit points to every day with no habits scheduled.
+- Journal "entries" use the Overview's rule (non-empty after stripping tags), so an
+  `&nbsp;`-only day counts as an entry with zero words.
+- Task / focus timestamps are bucketed by their ISO **date prefix** (UTC), exactly as the
+  Overview does — near local midnight a session can land on the neighbouring day. Hour-of-day
+  uses the local hour.
+- Chart.js can't resolve `var(--x)` on a canvas, so the Detailed Analysis reads its chart
+  colours from the live theme (`themeColors()`); it registers its own Chart.js components too.
+  `ReportsView` is memoised and `App.jsx` only flips `data-theme` on the root, so the view
+  re-renders on that attribute (`useThemeVersion`) — otherwise a theme toggle from the sidebar would
+  leave the axis / grid colours on the old theme. List keys include the position: labels repeat
+  (two reviews on one day, a custom task list named "Work").
 
 ### Activity Log (`activity`)
 Cross-module audit trail (`nook-activity-log`): filter by module / status / date range,

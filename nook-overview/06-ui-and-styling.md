@@ -85,6 +85,33 @@ date popup ended up cut off. A click inside a popup must not count as "outside" 
 opened it — popups carry `data-nk-popover` for outside-click handlers to check (see JournalView's
 export menu). `components/themedControls.test.js` fails if a native control is added back.
 
+## Pinned headers (sticky toolbars)
+
+The Activity Log, Notes, Links and Countdowns keep their toolbar on screen with a `border-bottom`
+line under it while the content scrolls beneath. The scroll container is **`.tab-content`** (the
+page itself, on phones too), so this is plain `position: sticky; top: 0; z-index: 30;
+background: var(--bg-base)` on the header — `.al-toolbar`, `.nv-bar` + `.lk-bar` (one shared rule),
+`.cdp-head`. To pin another tab's header the same way: add `<tab>-tab-active` to the wrapper in
+`App.jsx`, add it to the `padding-top: 0` rule in `index.css`, and give the header the sticky rule.
+The traps:
+
+- **Drop the tab shell's top padding** (`.sunsama-tab-transition.<tab>-tab-active { padding-top: 0 }`,
+  class added in `App.jsx`'s wrapper `className`). Otherwise the header travels the 32px of padding
+  upward before it pins, which reads as "moving on first scroll". The header then supplies its own
+  top padding (24px). The page wrapper (`.cdp-page`, `.al-view`) gets no top padding either.
+- **No `overflow` / fixed `height` between the header and `.tab-content`.** NotesView's root used to
+  be `height:100%; overflow:hidden` — that makes the root the sticky element's scroll container, so
+  it never pins. Same reason the tab wrapper's animation is opacity-only (a transform would become
+  the containing block).
+- **A pinned block must stay small.** Pinned headers cost screen height (Notes wraps to two rows below
+  ~1450px; Countdowns' stats + one filter row is ~155px). Countdowns uses `display: contents` on
+  `.cdp-head` at ≤768px so the stat cards scroll away and only `.cdp-filterbar` (now a direct child of
+  the page, so it can still pin) stays.
+- **`Select` is as wide as its wrapper**: `width: style.width || '100%'`. In a wrapping toolbar a
+  `Select` with no `width` becomes a full-row item and forces its own line — pass `style.width`.
+- Dropdowns opened from a pinned header are fine: the header has no `overflow` and the `Select` list
+  has `z-index: 9999` inside the header's own stacking context, so it paints over the scrolling content.
+
 ## Popups, menus and clipping
 
 Three things in this app bite anyone who adds a dropdown or popup:
