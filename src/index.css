@@ -2645,6 +2645,19 @@ kbd {
   .ra-kpis { grid-template-columns: 1fr; }
 }
 
+/* ── Notes (.nv-bar) and Links (.lk-bar): pinned toolbar, same pattern as the Activity Log's .al-toolbar ── */
+.nv-bar, .lk-bar {
+  position: sticky; top: 0; z-index: 30;
+  overflow: visible; min-width: 0;
+  background: var(--bg-base);
+  padding: 24px 24px 14px;
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 768px) {
+  .nv-bar { padding: 14px 14px 12px; }
+  .lk-bar { padding: 14px 24px 12px; }   /* the links list below keeps its 24px gutter */
+}
+
 /* ── Reports: Overview / Detailed Analysis switch + the Detailed Analysis view ── */
 .ra-view-switch { display: flex; }
 .da { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 28px; }
@@ -6133,8 +6146,12 @@ select.modal-input {
 
 /* Activity Log's toolbar is position:sticky. Drop the tab shell's top padding so
    the toolbar starts flush at the scroll-container top — otherwise it travels the
-   32px of padding upward before pinning, which reads as "moving on first scroll". */
-.sunsama-tab-transition.activity-tab-active {
+   32px of padding upward before pinning, which reads as "moving on first scroll".
+   Notes (.nv-bar), Links (.lk-bar) and Countdowns (.cdp-head) pin their headers the same way. */
+.sunsama-tab-transition.activity-tab-active,
+.sunsama-tab-transition.notes-tab-active,
+.sunsama-tab-transition.links-tab-active,
+.sunsama-tab-transition.countdowns-tab-active {
   padding-top: 0;
 }
 

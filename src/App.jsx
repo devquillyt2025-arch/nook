@@ -1669,7 +1669,7 @@ export default function App() {
         <AnimatePresence mode="wait">
         <motion.div
           key={activeTab}
-          className={`sunsama-tab-transition${activeTab === 'daily' ? ' yartu-tab-active' : ''}${activeTab === 'calendar' ? ' calendar-tab-active' : ''}${activeTab === 'activity' ? ' activity-tab-active' : ''}${activeTab === 'habits' ? ' habits-tab-active' : ''}${activeTab === 'journal' ? ' journal-tab-active' : ''}${activeTab === 'tasks' ? ' tasks-tab-active' : ''}`}
+          className={`sunsama-tab-transition${activeTab === 'daily' ? ' yartu-tab-active' : ''}${activeTab === 'calendar' ? ' calendar-tab-active' : ''}${activeTab === 'activity' ? ' activity-tab-active' : ''}${activeTab === 'habits' ? ' habits-tab-active' : ''}${activeTab === 'journal' ? ' journal-tab-active' : ''}${activeTab === 'tasks' ? ' tasks-tab-active' : ''}${activeTab === 'notes' ? ' notes-tab-active' : ''}${activeTab === 'countdowns' ? ' countdowns-tab-active' : ''}${activeTab === 'links' ? ' links-tab-active' : ''}`}
           // Opacity-only transition: animating y leaves an inline transform on this
           // wrapper even at rest, which makes it the containing block for any
           // position:sticky descendant (e.g. the Activity Log toolbar) and breaks
