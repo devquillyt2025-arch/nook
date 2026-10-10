@@ -96,12 +96,16 @@ export menu). `components/themedControls.test.js` fails if a native control is a
 
 ## Pinned headers (sticky toolbars)
 
-The Activity Log, Notes, Links and Countdowns keep their toolbar on screen with a `border-bottom`
-line under it while the content scrolls beneath. The scroll container is **`.tab-content`** (the
-page itself, on phones too), so this is plain `position: sticky; top: 0; z-index: 30;
-background: var(--bg-base)` on the header — `.al-toolbar`, `.nv-bar` + `.lk-bar` (one shared rule),
-`.cdp-head`. To pin another tab's header the same way: add `<tab>-tab-active` to the wrapper in
-`App.jsx`, add it to the `padding-top: 0` rule in `index.css`, and give the header the sticky rule.
+The Activity Log, Notes, Links, Countdowns and Today keep their toolbar on screen with a
+`border-bottom` line under it while the content scrolls beneath. The scroll container is
+**`.tab-content`** (the page itself, on phones too), so this is plain `position: sticky; top: 0;
+z-index: 30; background: var(--bg-base)` on the header — `.al-toolbar`, `.nv-bar` + `.lk-bar` (one
+shared rule), `.cdp-head`, `.today-head`. To pin another tab's header the same way: add
+`<tab>-tab-active` to the wrapper in `App.jsx` (Today's shell class is the older `yartu-tab-active`),
+add it to the `padding-top: 0` rule in `index.css`, and give the header the sticky rule. Today's
+greeting card is trimmed while pinned (smaller padding) and on a phone shrinks to the name, a 2×2
+grid of counts and a slim toggle (~190px, ~22% of the screen, down from ~300px) — measure a pinned
+block before shipping it.
 The traps:
 
 - **Drop the tab shell's top padding** (`.sunsama-tab-transition.<tab>-tab-active { padding-top: 0 }`,

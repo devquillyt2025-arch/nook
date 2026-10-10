@@ -6184,11 +6184,13 @@ select.modal-input {
 /* Activity Log's toolbar is position:sticky. Drop the tab shell's top padding so
    the toolbar starts flush at the scroll-container top — otherwise it travels the
    32px of padding upward before pinning, which reads as "moving on first scroll".
-   Notes (.nv-bar), Links (.lk-bar) and Countdowns (.cdp-head) pin their headers the same way. */
+   Notes (.nv-bar), Links (.lk-bar), Countdowns (.cdp-head) and Today (.today-head, whose shell class
+   is yartu-tab-active) pin their headers the same way. */
 .sunsama-tab-transition.activity-tab-active,
 .sunsama-tab-transition.notes-tab-active,
 .sunsama-tab-transition.links-tab-active,
-.sunsama-tab-transition.countdowns-tab-active {
+.sunsama-tab-transition.countdowns-tab-active,
+.sunsama-tab-transition.yartu-tab-active {
   padding-top: 0;
 }
 
@@ -6529,24 +6531,86 @@ select.modal-input {
   box-shadow: 0 2px 10px rgba(120,105,252,0.3);
 }
 
-.today-3col-grid {
+/* Today's greeting + summary + Viewing/Editing toggle stay pinned, with a line under them, while the
+   charts and cards scroll beneath — the same pattern as the other pinned headers. The card is trimmed
+   while pinned so it doesn't eat the screen (it was ~25% of a laptop, ~35% of a phone). */
+.today-head {
+  position: sticky; top: 0; z-index: 30;
+  background: var(--bg-base);
+  padding: 20px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.today-head .yartu-greeting-row { padding: 14px 24px; }
+@media (max-width: 768px) {
+  /* On a phone: no "Today you have:" label, the four counts in a 2×2 grid, a slim toggle, no caption. */
+  .today-head { padding: 10px 0; }
+  .today-head .yartu-greeting-row { padding: 10px 12px; gap: 8px; border-radius: 12px; }
+  .today-head .yartu-greeting-title { font-size: 0.95rem; }
+  .today-head .yartu-greeting-left { gap: 4px; }
+  .today-head .yartu-summary-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; margin-top: 0; font-size: 0.8rem; }
+  .today-head .yartu-summary-prefix, .today-head .yartu-summary-divider { display: none; }
+  .today-head .yartu-summary-item { min-width: 0; white-space: normal; }
+  .today-head .yartu-greeting-row > div:last-child > span { display: none; }
+  .today-head .yartu-mode-toggle { padding: 2px; border-radius: 10px; }
+  .today-head .yartu-mode-btn { padding: 4px 10px; font-size: 0.78rem; border-radius: 8px; }
+}
+
+/* Today: a row of three small charts, then the cards you act on. */
+.today-charts {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.25fr) minmax(0, 1.45fr);
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 24px;
+  width: 100%;
+  align-items: stretch;
+  box-sizing: border-box;
+}
+.today-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 24px;
   width: 100%;
   align-items: start;
   box-sizing: border-box;
 }
-@media (max-width: 1280px) {
-  .today-3col-grid {
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr);
-  }
+@media (max-width: 900px) {
+  .today-actions { grid-template-columns: minmax(0, 1fr); }
 }
+/* On a phone the actions matter more than the trend charts: today's donut first, then the
+   cards you act on, then the 7-day bars and the category pie. (.today-charts dissolves so its
+   cards become flex items of the column and can be ordered.) */
 @media (max-width: 768px) {
-  .today-3col-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  .today-charts { display: contents; }
+  .tc-donut-card { order: 1; }
+  .today-actions { order: 2; }
+  .tc-week-card, .tc-pie-card { order: 3; }
 }
+
+/* Chart internals (components/TodayCharts.jsx) */
+.tc-card-sub { font-size: 0.8rem; color: var(--text-secondary); }
+.tc-foot { font-size: 0.74rem; color: var(--text-muted); }
+.tc-empty { margin: 0; padding: 18px 4px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+.tc-donut-wrap { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.tc-donut { position: relative; flex-shrink: 0; display: grid; place-items: center; width: 132px; height: 132px; border-radius: 50%; }
+.tc-donut-hole { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 98px; height: 98px; border-radius: 50%; background: var(--surface-panel); }
+.tc-donut-pct { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--text-primary); }
+.tc-donut-sub { font-size: 0.7rem; color: var(--text-muted); }
+.tc-pie { flex-shrink: 0; display: grid; place-items: center; width: 124px; height: 124px; border-radius: 50%; }
+.tc-pie-hole { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 82px; height: 82px; border-radius: 50%; background: var(--surface-panel); }
+.tc-legend { flex: 1; min-width: 110px; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem; color: var(--text-secondary); }
+.tc-legend li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tc-legend b { margin-left: auto; padding-left: 8px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.tc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-legend-row { flex: none; flex-direction: row; gap: 16px; margin-top: 10px; }
+.tc-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 3px; }
+.tc-bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; height: 150px; }
+.tc-bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; min-width: 0; }
+.tc-bar-total { height: 14px; font-size: 0.68rem; color: var(--text-muted); }
+.tc-bar-track { flex: 1; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.tc-bar-stack { display: flex; flex-direction: column; width: 100%; max-width: 34px; overflow: hidden; border-radius: 6px; }
+.tc-seg { min-height: 0; }
+.tc-bar-day { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); }
+.tc-bar-num { font-size: 0.78rem; color: var(--text-secondary); }
+.tc-bar-col.is-today .tc-bar-day, .tc-bar-col.is-today .tc-bar-num { font-weight: 700; color: var(--accent); }
 
 .tasks-2col-grid {
   display: grid;

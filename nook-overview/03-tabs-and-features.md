@@ -8,7 +8,7 @@ is **not** 1:1 — two ids read differently in the UI: `daily`→"Today",
 
 | id | Label | Owns | Key files | Storage |
 |---|---|---|---|---|
-| `daily` | Today | Day dashboard: a grid of summary cards (below) | `DailyGoalsView` | reads tasks, habits, journal, pomodoro log, `nook-intentions`, `nook_goals` |
+| `daily` | Today | Today at a glance: three charts over the cards you act on (below) | `DailyGoalsView`, `TodayCharts`, `trackers/todayStats.js` | reads tasks, habits, journal, pomodoro log, calendar events, custom categories, weekly reviews |
 | `tasks` | Tasks | Tasks, subtasks, scheduling, Google Tasks entry point | `TaskList` (~1800 ln), `AddTaskModal`, `ReminderField` | `nook-tasks`, `nook_task_sort`, `nook_custom_categories` |
 | `calendar` | Calendar | Month / Week / Day views, custom events, Google Calendar overlay, an "Inbox" of unscheduled tasks | `CalendarView`, `utils/googleCalendarSync.js` | `nook-calendar-events`, `nook_gcal_*` |
 | `habits` | Habits | Habit tracking | `HabitsView`, `habitsStore.js` | `nook_habits` |
@@ -38,8 +38,8 @@ UI:
 | **AI Assistant** panel (`AssistantChat`, Gemini) | **Hidden** | Mounted, but only the commented-out nav entry toggles it. The Settings card "AI Assistant Integration" (API key field) is still visible. |
 | **Saved Logins** tab | **Removed** | Leftover plaintext data is surfaced in Settings (see 02). |
 | **Trackers** (`nook-trackers`, `AddTrackerModal`) | **Legacy** | Data retained; Reports no longer shows trackers; nothing calls `openAddTracker`. |
-| **Daily intentions** editor (`DailyIntentions`) | **Legacy** | Component not imported; `nook-intentions` is still rolled at midnight and counted on Today. |
-| **Goals** (`nook_goals`) | **Legacy** | Today shows existing goals; nothing creates them. |
+| **Daily intentions** editor (`DailyIntentions`) | **Legacy** | Component not imported; `nook-intentions` is still rolled at midnight but nothing displays it (Today used to count it as "events to do" — blank placeholders made that read 3 on a new account). |
+| **Goals** (`nook_goals`) | **Legacy** | Nothing creates them and Today no longer shows them (its Goals card was removed); only the Detailed Analysis and the AI context read them. |
 | **Keyboard shortcuts modal** (`ShortcutsModal`) | **Unwired** | Never opened (no `setOpenModal('shortcuts')`), and its listed keys (Space, R, 1–4, N, A, S, ?, D) have no handlers. Real shortcuts: `Esc` closes modals/menus, `Ctrl/Cmd+K` opens search (and the journal's entry palette on that tab). |
 | `AnalyticsModal`, `TrackerCharts`, `DailyIntentions` components | **Dead** | Not imported anywhere. Kept; deleting a module is a product decision. |
 
@@ -48,14 +48,32 @@ UI:
 ## What each tab does
 
 ### Today (`daily`)
-The landing dashboard, titled "Welcome back, <profile name>". A grid of cards:
-**Tasks**, **Habits Due**, **Goals Progress**, **Journal**, **Pomodoro Timer**,
-**Recent Activity**, **This Week**, **Progress Overview**, **Time Breakdown** and
-**Active Streaks**. A Viewing/Editing toggle switches the Tasks card between a summary
-and in-place task management (edit/complete/delete/add). `DailyGoalsView` receives most
-of `App.jsx`'s state as props and computes everything from tasks, habits, journal and
-the pomodoro log; the 1-second timer value comes from the external tick store so the
-card re-renders without re-rendering the app.
+The landing dashboard, titled "Welcome back, <profile name>", with a one-line summary
+(calendar events today, tasks due with how many are overdue, habits due, journal pending).
+Below it, three small charts (`TodayCharts.jsx` — plain CSS/SVG, no Chart.js, because this view
+is on the main bundle): **Today** (a ring: tasks + habits done out of what was planned today),
+**Last 7 days** (stacked bars: tasks and habits completed per day; carries the **Weekly review**
+and **Reports →** buttons) and **This week by category** (a ring of tasks completed, by
+category). Then the cards you act on: **Tasks** (overdue + due today, or the next 7 days),
+**Habits Due**, **Pomodoro Timer**, **Journal** and **Active Streaks**. A Viewing/Editing toggle
+switches the Tasks card between a summary and in-place task management. The greeting, the
+summary line and that toggle are **pinned** (`.today-head`) with a line under them; everything
+below scrolls ([06 § Pinned headers](06-ui-and-styling.md#pinned-headers-sticky-toolbars)). On a
+phone the order is the Today ring, the action cards, then the other two charts.
+
+All numbers come from the pure `buildToday()` in `trackers/todayStats.js` (tested). "Today" is the
+viewer's **local** day (Reports buckets timestamps by UTC prefix; Today deliberately doesn't).
+The 1-second timer value comes from the external tick store so the card re-renders without
+re-rendering the app. The previous Today was rebuilt because several cards were wrong — focus
+sessions are plain ISO strings but it read `.timestamp` off them (so "focus today" was always 0 and
+fell back to the sum of every task's estimate), "This Week" was all-time, "Recent Activity" listed old
+completions, and the Goals card's "View All" linked to a tab that doesn't exist. Don't reintroduce
+a fallback that shows made-up minutes. `DailyGoalsView` ignores several props `App.jsx` still passes
+(trackers, intentions, …); they're harmless.
+
+The **Weekly review** (`WeeklyReviewModal`, opened from the Last-7-days card) works on the real
+Habits / Tasks / Focus data with the same maths as Reports; it had been unreachable since Today lost
+its button, and still read the legacy trackers. It writes `nook-weekly-reviews`, which Reports shows.
 
 ### Tasks (`tasks`)
 The largest view. A dashboard grid with a **Pending** card (grouped into
