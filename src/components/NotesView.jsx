@@ -630,16 +630,18 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
 
   return (
     <ErrorBoundary title="Notes failed to load" message="An unexpected error occurred in the Notes view. Try refreshing.">
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'transparent', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', background: 'transparent' }}>
 
-      {/* ── Top Bar ── */}
-      <div style={{ padding: '8px 24px 12px', flexShrink: 0 }}>
+      {/* ── Top Bar — pinned (position:sticky, see .nv-bar) while the notes scroll under it.
+          The root above must not set overflow/height: either would turn it into the sticky
+          bar's scroll container and stop it pinning to the tab's scroll area. ── */}
+      <div className="nv-bar">
 
         {/* ROW 1: search → palette → all tags → date range → view toggle → count */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
 
-          {/* 1. Search — first in the row */}
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: '0 0 340px', width: 340 }}>
+          {/* 1. Search — first in the row; shrinks before the controls wrap */}
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: '1 1 220px', minWidth: 180, maxWidth: 340 }}>
             <svg style={{ position: 'absolute', left: 9, color: 'var(--text-muted)', pointerEvents: 'none' }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input
               type="search"
@@ -695,7 +697,7 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
             value={activeTag || 'all'}
             options={[{value:'all',label:'All Tags'}, ...allTags.map(t => ({value:t, label:`#${t}`}))]}
             onChange={e => setActiveTag(e.target.value === 'all' ? null : e.target.value)}
-            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, height: 34, padding: '0 12px', fontSize: '0.8rem', flexShrink: 0, whiteSpace: 'nowrap', boxSizing: 'border-box' }}
+            style={{ width: 130, background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, height: 34, padding: '0 12px', fontSize: '0.8rem', flexShrink: 0, whiteSpace: 'nowrap', boxSizing: 'border-box' }}
           />
 
           {/* 5. Date range */}
@@ -720,7 +722,7 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
           </div>
 
           {/* 5b. View mode toggle */}
-          <div role="group" aria-label="View mode" style={{ display: 'flex', gap: 0, background: 'var(--bg-input)', borderRadius: 8, height: 34, border: '1px solid var(--border)', flexShrink: 0, overflow: 'hidden', boxSizing: 'border-box' }}>
+          <div role="group" aria-label="View mode" style={{ marginLeft: 'auto', display: 'flex', gap: 0, background: 'var(--bg-input)', borderRadius: 8, height: 34, border: '1px solid var(--border)', flexShrink: 0, overflow: 'hidden', boxSizing: 'border-box' }}>
             <button
               type="button"
               onClick={() => setViewMode('grid')}
@@ -743,8 +745,8 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
             </button>
           </div>
 
-          {/* 6. Entry count — pushed to far right */}
-          <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right', minWidth: 110 }}>
+          {/* 6. Entry count — sits right after the view toggle; the pair is pushed to the far right */}
+          <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right', minWidth: 110 }}>
             {(localSearchQuery.trim() || globalSearchQuery.trim() || activeTag || activeColor || dateRange.start || dateRange.end)
               ? `${filtered.length} of ${notes.length} entries`
               : `${notes.length} entries`}
