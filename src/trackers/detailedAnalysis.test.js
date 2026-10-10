@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
 import { buildAnalysis, loadAnalysisSources, fmtHour, fmtMinutes, MAX_DAYS } from './detailedAnalysis';
 import { rangeBounds, tasksDoneInRange, focusInRange, habitRangeStats, journalCountInRange, dailyScoreH } from './reportsAnalytics';
 
@@ -8,7 +8,12 @@ const TODAY = '2026-10-10';
 const at = ds => `${ds}T12:00:00.000Z`;   // UTC noon: the date prefix is `ds` in every timezone
 const week = () => rangeBounds('week');
 
-beforeAll(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 9, 10, 12, 0, 0)); });
+// Pin the clock at import time, NOT in a beforeAll: several describe blocks below build their
+// analysis in the describe body, which runs while vitest is still collecting — before any
+// beforeAll. With the clock pinned there they used the real date, so they passed only on the one
+// day the real date happened to be 2026-10-10.
+vi.useFakeTimers();
+vi.setSystemTime(new Date(2026, 9, 10, 12, 0, 0));
 afterAll(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 const habit = (id, completions, extra = {}) => ({ id, name: id, category: 'health', frequency: 'daily', completions, createdAt: at('2026-01-01'), ...extra });
