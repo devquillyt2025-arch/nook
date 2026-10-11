@@ -468,7 +468,7 @@ function SectionLabel({ title, count, color }) {
 // only when it has tasks — empty groups are skipped by the caller.
 function TaskGroupCard({ title, count, color, tasks, renderTask }) {
   return (
-    <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 12, padding: '2px 14px 10px', marginBottom: 12 }}>
+    <div className="task-group-card" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 12, padding: '2px 14px 10px', marginBottom: 12 }}>
       <SectionLabel title={title} count={count} color={color} />
       <AnimatePresence initial={false}>
         {tasks.map(task => renderTask(task, false))}
@@ -1067,7 +1067,7 @@ function TaskList({ tasks, activeTaskId, timerRunning, onSelect, onToggle, onDel
       `}</style>
 
       {/* ── UNIFIED COMPACT TOOLBAR: Search → Sort → Filter → Overview → Sync ── */}
-      <div className="yartu-card" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 16px', width: '100%', boxSizing: 'border-box', flexShrink: 0, overflow: 'visible', position: 'relative', zIndex: 20 }}>
+      <div className="yartu-card tasks-toolbar" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 16px', width: '100%', boxSizing: 'border-box', flexShrink: 0, overflow: 'visible', position: 'relative', zIndex: 20 }}>
 
         {/* 1. Search — grows to fill */}
         <div className="task-search-wrap" style={{ position: 'relative', flex: 1, minWidth: 150, maxWidth: 280 }}>

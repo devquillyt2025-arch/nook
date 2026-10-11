@@ -170,6 +170,39 @@ is locked to `100dvh` (`html,body{overflow:hidden}`) and each tab wrapper is
 bounded to the viewport via a `*-tab-active` class so only the inner content
 scrolls, not the page. Mobile keeps normal page scroll.
 
+### The mobile layer (≤768px)
+
+One block at the very **end of `index.css`** (`/* ═══ MOBILE APP LAYER`) turns the desktop layouts into a
+phone app. It sits last on purpose — it overrides the per-view rules above instead of editing each — and it is
+all inside one `@media (max-width: 768px)`, so desktop is untouched. The rules that hold it together:
+
+- **The tab shell owns the gutter.** `.sunsama-tab-transition` is 16px on the sides; a view must not pad itself
+  sideways on top of it (that stacked 36px + 11–24px and put content ~55px in on a 390px screen). Pinned bars
+  (`.nv-bar`, `.lk-bar`, `.al-toolbar`, `.cdp-filterbar`) go full-bleed with `margin-inline: -16px;
+  width: calc(100% + 32px); padding-inline: 16px`. Set the **width** too — an explicit `width: 100%` otherwise
+  shifts the bar left and leaves it 16px short on the right.
+- **Everything page-scrolls.** Tasks and Habits are contained-scroll on desktop (locked page, an inner card
+  scrolls). On a phone that clipped the Pending Tasks card to ~100px and hid the whole task list, so the layer
+  releases `overflow`/`flex` on `.tasks-tab-active` / `.habits-tab-active` and their inner cards.
+- **A pinned bar must stay small.** Filters that wrapped onto four rows become one **scrolling chip row**.
+  Where the controls were loose siblings they are wrapped in `.nv-filters` (Notes) / `.al-filters` (Activity
+  Log): `display: contents` on desktop (the original flat row, unchanged), a `display: flex; overflow-x: auto`
+  row on phones. Do the same for any new toolbar rather than letting it wrap.
+- **Inline styles need `!important`.** Many toolbars set sizes inline (`flex`, `width`, `fontSize`,
+  `gridTemplateColumns`); the layer matches them with `!important` or an attribute selector
+  (`[style*="repeat(7, 1fr)"]` for the Calendar grids, where `1fr` lets one long event title widen a column).
+- **`height: 100%` inside a wrapping flex/grid toolbar is a trap** — it resolves against the toolbar's own
+  height. `.al-count-txt` did, came out 208px tall, and drew a stray line down the log with the gear and refresh
+  buttons landing on the rows. The mobile toolbar gives it `height: auto`.
+- **Bottom tab bar:** equal-width items; the active one is an accent pill behind the icon (no bordered box);
+  `env(safe-area-inset-bottom)` padding. `viewport-fit=cover` is set in `index.html` and `.app` pads for the
+  other insets. The **More** sheet is a 3-column grid (nine destinations = 3×3).
+- **A task row is two lines** (title; then icons · category · due date) via CSS grid. The desktop single line
+  has fixed 96px + 118px columns that left the title 0px wide at 390px.
+
+Verify a phone change at **360, 390 and 428** (and 768), dark and light, and *look at the screenshot*: the
+overflow check (`scrollWidth > clientWidth`) passed on every tab while Tasks was showing no tasks at all.
+
 ## Conventions to match (don't "improve")
 
 - Terse style: aligned `const` blocks, single-line guards, `try {} catch {}` around

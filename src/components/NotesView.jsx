@@ -662,6 +662,8 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
             New Note
           </button>
 
+          {/* Filters — display:contents on desktop (same flat row); a scrolling chip row on phones, see .nv-filters */}
+          <div className="nv-filters">
           {/* 3. Color palette — compact 22 px swatches */}
           <div role="group" aria-label="Filter by color" style={{ display: 'flex', gap: 3, alignItems: 'center', background: 'var(--bg-input)', padding: '0 8px', height: 34, borderRadius: 9999, border: '1px solid var(--border)', flexShrink: 0, boxSizing: 'border-box' }}>
             <button
@@ -753,6 +755,7 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
               ? `${filtered.length} of ${notes.length} entries`
               : `${notes.length} entries`}
           </span>
+          </div>
 
         </div>
 
