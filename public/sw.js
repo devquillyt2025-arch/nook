@@ -28,6 +28,12 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  // Only GETs are cacheable (cache.put rejects anything else); leave the rest to the network.
+  if (event.request.method !== 'GET') return;
+  // Cross-origin requests (Supabase, Google APIs, fonts, favicons) are never cached here (only same-origin
+  // 'basic' responses are), so don't intercept them: a request made *by the worker* is checked against the
+  // worker's own CSP connect-src, which would block fonts and favicons. Left alone, the page's CSP governs them.
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   // Network first for everything, fallback to cache
   event.respondWith(
     fetch(event.request)
@@ -72,9 +78,18 @@ self.addEventListener('push', event => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+// A push payload's url is just data. Only ever navigate to a page of this app.
+function sameOriginUrl(raw) {
+  const home = self.location.origin + '/';
+  try {
+    const u = new URL(raw || '/', self.location.origin);
+    return u.origin === self.location.origin ? u.href : home;
+  } catch { return home; }
+}
+
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+  const targetUrl = sameOriginUrl(event.notification.data && event.notification.data.url);
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
