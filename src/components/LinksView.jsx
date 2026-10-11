@@ -5,6 +5,7 @@ import { logActivity } from '../utils/activityLog';
 import { useSyncApplied } from '../utils/useSyncApplied';
 import { genId } from '../utils/id';
 import { UNCAT, catKeyOf, groupLinks } from '../utils/linkGroups';
+import { openSafeUrl } from '../utils/safeUrl';
 
 const STORAGE_KEY = 'nook_links';
 const BASE_CATS = ['Personal', 'Work', 'Finance', 'Read Later', 'Entertainment'];
@@ -216,7 +217,8 @@ function LinkCard({ link, onEdit, onDelete, onToggleStar, compact }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const cs = catStyle(link.category);
 
-  const openLink = () => window.open(link.url, '_blank', 'noopener,noreferrer');
+  // A stored url can come from sync or a backup, so only http(s) is ever opened (no javascript:/data:).
+  const openLink = () => { openSafeUrl(link.url); };
 
   const iconBtn = (label, col, hBg, hCol, svg, onClick) => (
     <button onClick={e => { e.stopPropagation(); onClick(); }} aria-label={label} title={label}

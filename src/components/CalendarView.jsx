@@ -4,6 +4,7 @@ import TimeInput from './TimeInput';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
 import { useSyncApplied } from '../utils/useSyncApplied';
+import { safeHttpUrl, openSafeUrl } from '../utils/safeUrl';
 import {
   isGCalConnected,
   getCalendarToken, fetchGCalEvents, createGCalEvent, gcalColor,
@@ -271,7 +272,7 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
   const getEventStyle = ev => ev.type === 'gcal' ? (c => ({ bg: `${c}1a`, text: c, border: c }))(gcalColor(ev.colorId)) : getCategoryColor(ev.category);
 
   // gcal events open their source in Google Calendar; everything else opens the detail modal.
-  const openEvent = ev => { ev.htmlLink ? window.open(ev.htmlLink, '_blank') : setDetailEvent(ev); };
+  const openEvent = ev => { safeHttpUrl(ev.htmlLink) ? openSafeUrl(ev.htmlLink) : setDetailEvent(ev); };
 
   const renderChip = (ev, compact = false) => {
     const c = getEventStyle(ev);
