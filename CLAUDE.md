@@ -87,6 +87,10 @@ Timer"). Full table in
 - **Never put a secret behind a `VITE_` prefix** — Vite inlines it into the shipped
   bundle. Client secrets belong only in edge-function env.
   → [05](nook-overview/05-backend.md), [07](nook-overview/07-build-and-setup.md)
+- **Stored text is untrusted — never turn it into HTML or a URL unchecked.** Journal HTML goes through
+  `utils/sanitizeHtml.js` (never `el.innerHTML = stored`, even on a detached element); URLs from data go through
+  `utils/safeUrl.js`; a backup import may only write keys `utils/importKeys.js` allows. A new third-party host needs
+  `vercel.json`'s CSP updated. → [05 § Security posture](nook-overview/05-backend.md#security-posture)
 - **`vite build` passing is NOT verification.** No TS/lint — it will build a
   render-time `ReferenceError`. Verify by driving the real app. To run gate-free,
   point Vite's `envDir` at a dir holding an empty `.env`; do **not** edit or move

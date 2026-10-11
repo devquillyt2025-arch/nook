@@ -28,6 +28,9 @@ vitest config. Everything is colocated as `*.test.js`:
 | `utils/linkGroups.test.js` | 11 | The Links tab's category grouping: case/space-insensitive merging with the most-used spelling as label, A–Z with Uncategorised last, starred-first inside a group, input never mutated, malformed input |
 | `utils/notesStore.test.js` | 9 | Notes keep their list position: `addedAt()` ordering, and that editing / opening-and-closing / recolouring a note (all restamp `updatedAt`) never reorders it while a new note lands first |
 | `trackers/detailedAnalysis.test.js` | 42 | The Reports → Detailed Analysis maths with the clock pinned to Sat 2026-10-10: every section's numbers, agreement with the Overview's own helpers (`tasksDoneInRange`, `habitRangeStats`, `focusInRange`, `journalCountInRange`, `dailyScoreH`), tie-breaks that must not depend on storage order, range clamping / future days, malformed dates and sources (no `NaN`) |
+| `utils/sanitizeHtml.test.js` | 17 | The Journal sanitiser (runs under `jsdom` via a `// @vitest-environment jsdom` docblock): the editor's own output survives byte-for-byte; script / `on*` handlers / `javascript:` / iframe / svg / forms are gone; known mutation-XSS vectors (checked by parsing the *output*, not string-matching); `style` keeps plain declarations and drops `url()`, `@import`, `position`, escapes; idempotent; null-safe |
+| `utils/safeUrl.test.js` | 5 | Only http(s) is ever opened — `javascript:` in any case / padding / embedded newline, `data:`, `vbscript:`, `file:`, `blob:`, scheme-less and non-string values are refused; `window.open` gets `noopener,noreferrer` |
+| `utils/importKeys.test.js` | 6 | Which keys a backup may write: ordinary data yes; `nook_gcal_tokens`, any `*token*` / `*pkce*`, sync queues and `nook_ai_api_key` never; non-`nook` keys, `__proto__`, non-strings never |
 
 The engine suite is grouped by failure mode, which is how to read it before changing the
 engine: *basic two-device sync · the whole-blob failure mode this replaces · a local edit not
@@ -187,6 +190,21 @@ journal day that exists on both. This run is what found the cap-overflow "change
 (fixed in `applyToDef`, regression test in `syncEngine.test.js`). The only console noise it
 should produce is React's "unique key" warning for the id-less note — that is a legacy-data
 artefact in `NotesView`, not a sync problem.
+
+### Verifying a security change
+
+- **Prove the bug first.** The Journal XSS was demonstrated before it was fixed: seed a harmless payload
+  (`<img src=x onerror="window.__pwned=…">`) into `nook_journal_<today>`, open the Journal, read `window.__pwned`
+  (it ran 8 times from just opening the tab), then re-run after the fix. A unit test that has never failed proves
+  nothing — also run its assertions against raw input once to confirm they can fail.
+- **CSP needs a real enforced run, and the page's violation events are not enough.** Build, serve with
+  `vercel.json`'s headers, drive every tab at desktop and phone width, collect `securitypolicyviolation` — and
+  separately check that Google Fonts and favicons actually *load* with the service worker controlling the page
+  (`document.fonts`' loaded faces; `document.fonts.check()` is vacuously true). A service worker's own fetches obey
+  the worker's CSP and fail silently; that is how the first CSP draft broke fonts for returning visitors.
+- **Secrets in the bundle:** build with the real `.env.local` into a throwaway directory, grep the output for the key's
+  value (count files, never print it), delete the build.
+- `npm audit` after adding a dependency; `npm audit fix` is non-breaking, `--force` is not (Vite / Vitest majors).
 
 ### Pitfalls the harness hit (so you don't re-discover them)
 
