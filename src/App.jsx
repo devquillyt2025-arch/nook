@@ -47,6 +47,7 @@ import SidebarSearch, { useNookSearch, ResultsList } from './components/SidebarS
 import VoiceCommandButton from './components/VoiceCommandButton';
 import nookLogo from './nook-favicon.png';
 import AssistantChat from './components/AssistantChat';
+import { isImportableKey } from './utils/importKeys';
 
 // ── Code-split route-level views (each tab's chunk loads only when that tab is opened) ──
 const ReportsView     = lazy(() => import('./components/ReportsView'));
@@ -377,10 +378,9 @@ export default function App() {
     const isSchemaV1 = data?.schemaVersion === 1 && data?.data?.local;
     const localMap = isSchemaV1 ? data.data.local : data;
 
-    const ALLOWED_PREFIX = /^nook[-_]/;
-    const BLOCKED_KEYS = new Set(['nook_google_tokens','nook_pkce_verifier','nook_sync_queue','nook_deleted_tasks']);
-
-    const keyCount = Object.keys(localMap).filter(k => ALLOWED_PREFIX.test(k) && !BLOCKED_KEYS.has(k)).length;
+    // A backup file is untrusted input — which keys it may write is decided in utils/importKeys.js
+    // (nook-/nook_ only, never tokens, PKCE, sync queues or the stored API key).
+    const keyCount = Object.keys(localMap).filter(isImportableKey).length;
     if (!confirm(`This will replace ${keyCount} data set(s) with the backup. Continue?`)) return;
 
     // Cross-device sync is merged, never destructive: while the backup is being
@@ -389,8 +389,7 @@ export default function App() {
     // signed-in device.
     await runAdditiveSync(async () => {
       for (const [key, value] of Object.entries(localMap)) {
-        if (!ALLOWED_PREFIX.test(key)) continue;      // reject non-nook keys
-        if (BLOCKED_KEYS.has(key)) continue;           // never restore tokens/queues
+        if (!isImportableKey(key)) continue;           // non-nook keys, tokens, queues, API key
         try {
           // value is already parsed; re-stringify for localStorage
           localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
