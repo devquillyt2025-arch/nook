@@ -7,6 +7,7 @@ import { localDateStr } from '../utils/date';
 import { exportJournalDocx } from '../utils/journalDocx';
 import { useSyncApplied } from '../utils/useSyncApplied';
 import { ackSync } from '../utils/sync';
+import { sanitizeJournalHtml, htmlToPlainText } from '../utils/sanitizeHtml';
 
 // ─── Shared SVG props ───────────────────────────────────────────────
 const S = { fill:'none', stroke:'currentColor', strokeWidth:'2', strokeLinecap:'round', strokeLinejoin:'round' };
@@ -62,7 +63,8 @@ function isHtmlContent(str) {
 
 function toHtml(content) {
   if (!content) return '';
-  if (isHtmlContent(content)) return content;
+  // Stored HTML is untrusted (it can arrive via sync or a backup) — see utils/sanitizeHtml.js.
+  if (isHtmlContent(content)) return sanitizeJournalHtml(content);
   return content.split('\n').map(line =>
     line.trim()
       ? `<p>${line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`
@@ -70,11 +72,10 @@ function toHtml(content) {
   ).join('');
 }
 
+// Read through an inert parser: assigning stored HTML to a detached div's innerHTML still
+// loads <img> and fires its onerror, i.e. it runs script from the entry.
 function htmlToText(html) {
-  if (!html) return '';
-  const d = document.createElement('div');
-  d.innerHTML = html;
-  return d.textContent || d.innerText || '';
+  return htmlToPlainText(html);
 }
 
 function wordCountFromHtml(html) {
@@ -389,7 +390,7 @@ export default memo(function JournalView() {
     // Every day's entry is editable — save whichever date is being viewed.
     const existing = loadEntry(date) ?? emptyEntry(date);
     const isNew = !hasContentHtml(existing);
-    persistEntry(date, { ...existing, content: html });
+    persistEntry(date, { ...existing, content: sanitizeJournalHtml(html) });
     if (isNew && htmlToText(html).trim()) {
       logActivity({ module: 'journal', entity_type: 'journal_entry', entity_id: date, action: 'created', title: `Journal — ${date}` });
     } else if (!isNew) {
@@ -411,6 +412,18 @@ export default memo(function JournalView() {
       if (editorRef.current) saveCurrentEntry(editorRef.current.innerHTML);
     }, 1000);
   }, [saveCurrentEntry]);
+
+  // Pasted HTML comes from anywhere (a web page, another app). Don't let the browser drop it
+  // into the editor as-is: keep only what the journal supports, or fall back to plain text.
+  const handlePaste = useCallback((e) => {
+    const data = e.clipboardData;
+    if (!data) return;
+    e.preventDefault();
+    const clean = sanitizeJournalHtml(data.getData('text/html'));
+    if (htmlToPlainText(clean).trim()) document.execCommand('insertHTML', false, clean);
+    else document.execCommand('insertText', false, data.getData('text/plain'));
+    handleEditorInput();
+  }, [handleEditorInput]);
 
   const handleEditorBlur = useCallback(() => {
     if (!editorRef.current) return;
@@ -636,6 +649,7 @@ export default memo(function JournalView() {
               contentEditable
               suppressContentEditableWarning
               onInput={handleEditorInput}
+              onPaste={handlePaste}
               onBlur={handleEditorBlur}
               data-placeholder={isToday
                 ? (streak > 0 ? `Keep your ${streak}-day streak alive — begin where you are…` : 'Begin where you are. Write your thoughts, reflections, or notes for today…')

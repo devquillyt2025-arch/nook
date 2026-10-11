@@ -6,6 +6,7 @@
 //
 // Read-only: this never touches localStorage. Callers pass the entries in.
 import JSZip from 'jszip';
+import { parseHtmlInert } from './sanitizeHtml';
 
 // ─── XML helpers ────────────────────────────────────────────────────
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -98,8 +99,8 @@ function walkBlocks(node, ctx, out) {
 // Journal content is either rich-text HTML or legacy plain text (see toHtml in
 // JournalView) — the caller normalises to HTML before handing it over.
 function blocksFromHtml(html) {
-  const host = document.createElement('div');
-  host.innerHTML = html || '';
+  // Inert parse: `div.innerHTML = html` would load <img> and run its onerror (see sanitizeHtml.js).
+  const host = parseHtmlInert(html);
   const out = [];
   walkBlocks(host, {}, out);
   return out.length ? out : [paraXml([runXml('')])];
