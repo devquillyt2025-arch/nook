@@ -38,6 +38,32 @@ const PUSH_MAX_CONSECUTIVE_FAILURES = 5;
 
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
+// Constant-time comparison of the cron secret: both sides are hashed first, so neither the position of
+// the first differing byte nor the secret's length shows in the response time. An empty expected secret
+// (env var missing) never matches, even against an empty header.
+async function secretsMatch(provided: string | null, expected: string): Promise<boolean> {
+  if (!expected || provided === null) return false;
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(provided)),
+    crypto.subtle.digest('SHA-256', enc.encode(expected)),
+  ]);
+  const x = new Uint8Array(a), y = new Uint8Array(b);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
+}
+
+// A reminder row is user-written (RLS lets a user insert any title / source_id), so everything taken
+// from it is bounded, and anything placed in a URL is encoded.
+const MAX_TITLE = 200;
+const clip = (s: unknown, n = MAX_TITLE) => String(s ?? '').slice(0, n);
+// An email subject is plain text, not HTML: entity-escaping it would show "&amp;", but control
+// characters / newlines have no business in a header.
+const plainSubject = (s: unknown) => clip(s, 150).replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+const reminderPath = (r: { source_type: string; source_id: string }) =>
+  r.source_type === 'task' ? `/?reminder=task:${encodeURIComponent(clip(r.source_id, 100))}` : '/';
+
 function reminderBody(reminder: { target_at: string | null }) {
   if (!reminder.target_at) return 'Reminder';
   const d = new Date(reminder.target_at);
@@ -63,10 +89,8 @@ async function sendReminderEmail(to: string, reminder: { title: string; source_t
   if (!RESEND_API_KEY) throw new Error('RESEND_API_KEY not configured');
 
   const body = reminderBody(reminder);
-  const safeTitle = escapeHtml(reminder.title);
-  const url = SITE_URL
-    ? (reminder.source_type === 'task' ? `${SITE_URL}/?reminder=task:${reminder.source_id}` : SITE_URL)
-    : null;
+  const safeTitle = escapeHtml(clip(reminder.title));
+  const url = SITE_URL ? `${SITE_URL.replace(/\/+$/, '')}${reminderPath(reminder)}` : null;
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -74,12 +98,12 @@ async function sendReminderEmail(to: string, reminder: { title: string; source_t
     body: JSON.stringify({
       from: RESEND_FROM,
       to,
-      subject: `Reminder: ${safeTitle}`,
+      subject: `Reminder: ${plainSubject(reminder.title)}`,
       html: `
         <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto;">
           <h2 style="margin-bottom: 4px;">${safeTitle}</h2>
           <p style="color: #666; margin-top: 0;">${body}</p>
-          ${url ? `<p><a href="${url}" style="display:inline-block; background:#7869fc; color:#fff; padding:10px 20px; border-radius:8px; text-decoration:none; font-weight:600;">Open in Nook</a></p>` : ''}
+          ${url ? `<p><a href="${escapeHtml(url)}" style="display:inline-block; background:#7869fc; color:#fff; padding:10px 20px; border-radius:8px; text-decoration:none; font-weight:600;">Open in Nook</a></p>` : ''}
         </div>
       `,
     }),
@@ -90,7 +114,7 @@ async function sendReminderEmail(to: string, reminder: { title: string; source_t
 
 
 Deno.serve(async (req) => {
-  if (req.headers.get('X-Cron-Secret') !== CRON_SECRET) {
+  if (!(await secretsMatch(req.headers.get('X-Cron-Secret'), CRON_SECRET))) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
@@ -150,11 +174,11 @@ Deno.serve(async (req) => {
       }
 
       const payload = JSON.stringify({
-        title: reminder.title,
+        title: clip(reminder.title),
         body: reminderBody(reminder),
         source_type: reminder.source_type,
-        source_id: reminder.source_id,
-        url: reminder.source_type === 'task' ? `/?reminder=task:${reminder.source_id}` : '/',
+        source_id: clip(reminder.source_id, 100),
+        url: reminderPath(reminder),
       });
 
       for (const sub of subs ?? []) {
