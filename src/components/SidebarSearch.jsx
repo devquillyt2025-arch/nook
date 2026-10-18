@@ -180,12 +180,10 @@ export default function SidebarSearch({ tasks, habits, setActiveTab, onQueryChan
   const close = () => setOpen(false);
   const select = (tab) => { setActiveTab(tab); setOpen(false); setSearchQuery(''); };
 
-  const trigger = isRail ? (
-    <button ref={triggerRef} type="button" className="hdr-btn sb-rail-trigger" title="Search (Ctrl K)" onClick={() => setOpen(true)}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    </button>
-  ) : (
-    <button ref={triggerRef} type="button" className="sb-search-full" aria-label="Search Nook" onClick={() => setOpen(true)}>
+  // One pill in both states: on the rail CSS shrinks it to the icon and fades the text, so it
+  // narrows with the sidebar instead of being swapped for a different button (which snapped).
+  const trigger = (
+    <button ref={triggerRef} type="button" className="sb-search-full" aria-label="Search Nook" title={isRail ? 'Search (Ctrl K)' : undefined} onClick={() => setOpen(true)}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="search-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <span className="sb-search-full-placeholder">Search for anything...</span>
       <span className="search-shortcut-badge">{isMac ? '⌘K' : 'Ctrl K'}</span>
@@ -193,7 +191,7 @@ export default function SidebarSearch({ tasks, habits, setActiveTab, onQueryChan
   );
 
   return (
-    <div className={isRail ? 'sb-search-rail' : 'sb-search-full-wrap'}>
+    <div className="sb-search-full-wrap">
       {trigger}
       {open && (
         <SearchOverlay

@@ -144,7 +144,10 @@ input, textarea, select { font-family: inherit; }
 /* ─── App shell ─────────────────────────────────────────────────── */
 :root { --sidebar-width: 240px; --sidebar-rail-width: 60px; }
 .app { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
-.app-body { display: flex; flex: 1; min-height: 0; overflow: hidden; transition: margin-left 0.25s ease; }
+.app-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+/* No margin-left transition: the sidebar (position:fixed, above the page) animates its own width, but the
+   page must change size ONCE. Animating this margin re-laid-out every tab on every frame for 250ms — the
+   Journal's calendar/export card, the task rows, the charts all visibly shrank and grew with the sidebar. */
 .sidebar-open .app-body { margin-left: var(--sidebar-width); }
 .sidebar-rail .app-body { margin-left: var(--sidebar-rail-width); }
 
@@ -258,7 +261,7 @@ input, textarea, select { font-family: inherit; }
   z-index: 20;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
-  padding: 16px 14px 14px;
+  padding: 16px 6px 14px;   /* same in the rail: the icon column (centre x=30) never moves */
   overflow: hidden;   /* the sidebar itself doesn't scroll — .nav-scroll does, so the head stays pinned */
   box-sizing: border-box;
   box-shadow: 2px 0 8px rgba(0,0,0,0.04);
@@ -268,7 +271,7 @@ input, textarea, select { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 2px 2px 0;
+  padding: 2px 2px 0 12px;   /* 6 (nav) + 12 + 12 (half the logo) = centre x 30, same as the nav icons */
   margin-bottom: 18px;
   flex-shrink: 0;
   min-width: 0;
@@ -342,54 +345,69 @@ input, textarea, select { font-family: inherit; }
   overflow-y: auto; overflow-x: hidden;
   scrollbar-width: none;
   /* Reach into .main-nav's own padding, or the active item's glow is clipped at the edges. */
-  margin: 0 -14px; padding: 0 14px 4px;
+  margin: 0 -6px; padding: 0 6px 4px;
 }
 .nav-scroll::-webkit-scrollbar { width: 0; }
-.main-nav--rail .nav-scroll { margin: 0 -6px; padding: 0 6px 4px; }
 
-/* ─── Icon-rail collapse ─────────────────────────────────────────── */
-/* Smooth width transition on the sidebar itself */
+/* ─── Icon-rail collapse ─────────────────────────────────────────────
+   The rail is the SAME layout as the full sidebar, only narrower: identical padding, icon column
+   (centre x=30), row heights and vertical positions. Toggling changes the panel's width and fades
+   the text — no icon, logo or row moves. (It used to hide the text with display:none and re-centre
+   the icons, so they jumped to the middle of the still-wide panel and swooped across as it shrank.) */
 .main-nav {
   transition: width 0.25s ease, min-width 0.25s ease;
 }
-
-/* Rail state — shrink to 60px icon strip */
 .main-nav--rail {
   width: var(--sidebar-rail-width) !important;
   min-width: var(--sidebar-rail-width) !important;
-  padding: 16px 6px 14px;
 }
 
-/* In rail mode: hide everything that isn't an icon */
+/* Only the text goes away: it fades (display:none can't animate) and is clipped by the narrowing
+   panel. Fading out is quick; fading in waits a beat for the panel to widen. */
+.main-nav .nav-label,
+.main-nav .nav-section-label,
+.main-nav .sidebar-brand-name,
+.main-nav .sb-search-full-placeholder,
+.main-nav .search-shortcut-badge {
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity 0.18s ease 0.08s;
+}
+.main-nav .sidebar-brand-name,
+.main-nav .sb-search-full-placeholder { flex-shrink: 1; }
+.main-nav .sidebar-brand-name { text-overflow: clip; }  /* no "N…" flicker while it narrows */
 .main-nav--rail .nav-label,
 .main-nav--rail .nav-section-label,
-.main-nav--rail .nav-settings-separator,
-.main-nav--rail .nav-divider,
 .main-nav--rail .sidebar-brand-name,
-.main-nav--rail .sidebar-close-btn,
-.main-nav--rail .nav-badge { /* expanded-mode absolute badge */
+.main-nav--rail .sb-search-full-placeholder,
+.main-nav--rail .search-shortcut-badge {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+/* The collapse toggle stays mounted (so it doesn't pop in and out) and is hidden on the rail. */
+.main-nav--rail .sidebar-close-btn {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.1s ease, visibility 0s 0.1s;
+}
+.main-nav--rail .nav-badge { /* expanded-mode absolute badge; the rail shows .nav-badge-rail instead */
   display: none !important;
 }
 
-/* Rail buttons: centered, narrower */
-.main-nav--rail .main-nav-btn {
-  justify-content: center;
-  padding: 10px 0;
-  width: 100%;
-  /* Active bar: left border still works */
+/* Nav rows: icon-only content is exactly the rail's 48px button (1 + 14 + 18 + 14 + 1), so the same
+   padding works in both states and the icon sits at x=30 whether or not the label is showing. */
+.main-nav .main-nav-btn {
+  padding: 8px 14px;
+  gap: 12px;
 }
+.main-nav .nav-section-label { padding-left: 15px; }  /* lines up with the icons' left edge */
 
-/* Rail brand: just the logo + toggle */
-.main-nav--rail .sidebar-brand {
-  justify-content: center;
-  gap: 0;
-  margin-bottom: 10px;
-}
-
-/* Show toggle button in rail mode (it was hidden by sidebar-close-btn rule) */
-.main-nav--rail .sidebar-close-btn {
-  display: flex !important;
-  margin-left: 0;
+/* Search pill: shrinks to its icon (centre x=30) with the panel; the text fades and is clipped. */
+.main-nav .sb-search-full {
+  padding: 0 15px;
+  overflow: hidden;
 }
 
 /* Icon wrapper — relative so the corner badge can position over it */
@@ -425,79 +443,6 @@ input, textarea, select { font-family: inherit; }
 
 /* Show corner badge only when rail is active */
 .main-nav--rail .nav-badge-rail { display: flex; }
-
-/* Hide the expanded-mode absolute badge in rail mode (already done above) */
-
-/* ─── Tooltip (CSS-only, data-tooltip attr) ──────────────────────── */
-/* Tooltip appears to the right of each button with a short delay */
-.main-nav--rail .main-nav-btn {
-  position: relative;
-  overflow: visible;
-}
-.main-nav--rail .main-nav-btn::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%) translateX(-6px);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: 0.76rem;
-  font-weight: 500;
-  white-space: nowrap;
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-sm);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  z-index: 200;
-  letter-spacing: -0.01em;
-}
-/* Arrow pointing left */
-.main-nav--rail .main-nav-btn::before {
-  content: '';
-  position: absolute;
-  left: calc(100% + 2px);
-  top: 50%;
-  transform: translateY(-50%);
-  border: 5px solid transparent;
-  border-right-color: var(--border-strong);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  z-index: 200;
-}
-
-/* Reveal on hover with ~300ms delay */
-.main-nav--rail .main-nav-btn:hover::after,
-.main-nav--rail .main-nav-btn:hover::before {
-  opacity: 1;
-  transition-delay: 0.3s;
-}
-.main-nav--rail .main-nav-btn:hover::after {
-  transform: translateY(-50%) translateX(0);
-}
-
-/* Search widget in rail: hide the full button, show only icon trigger */
-.main-nav--rail .sb-search-full-wrap { width: 100%; }
-.main-nav--rail .sb-search-full {
-  width: 100%;
-  justify-content: center;
-  padding: 10px 0;
-  gap: 0;
-}
-.main-nav--rail .sb-search-full-placeholder,
-.main-nav--rail .search-shortcut-badge { display: none; }
-.main-nav--rail .sb-search-full { margin-bottom: 4px; }
-
-/* Rail trigger (already icon-only) needs centering */
-.main-nav--rail .sb-search-rail { width: 100%; display: flex; justify-content: center; }
-
-/* Suppress search tooltip from the ::after trick for search buttons */
-.main-nav--rail .sb-search-full-wrap::after,
-.main-nav--rail .sb-search-full::after { display: none; }
 
 /* Section label */
 .nav-section-label {
@@ -6078,7 +6023,8 @@ select.modal-input {
   border-right: 1px solid var(--border);
   width: 240px;
   min-width: 240px;
-  padding: 24px 16px;
+  /* No padding here: this selector out-ranks .main-nav / .main-nav--rail, so a padding on it made the
+     light rail's icons sit ~10px off-centre and differ from the dark one. Geometry is shared. */
 }
 :root[data-theme="light"] .main-nav-btn {
   padding: 8px 14px;
@@ -6859,9 +6805,6 @@ select.modal-input {
   box-shadow: 0 0 0 3px var(--accent-glow);
   outline: none;
 }
-
-/* Sidebar search — 64px rail: icon-only trigger, same overlay as the full pill */
-.sb-search-rail { position: relative; margin-bottom: 6px; }
 
 .search-results-list { display: flex; flex-direction: column; max-height: 340px; overflow-y: auto; }
 
@@ -8686,7 +8629,6 @@ select.modal-input {
    width:100%/flex-shrink:0 (sized for sitting alone in the sidebar) or it
    claims the whole row and pushes the mic button out of the visible area. */
 .sb-search-row .sb-search-full { width: auto; flex: 1; min-width: 0; flex-shrink: 1; }
-.main-nav--rail .sb-search-row { flex-direction: column; gap: 6px; }
 
 .voice-mic-btn { flex-shrink: 0; position: relative; }
 .voice-mic-btn:disabled { opacity: 0.35; cursor: not-allowed; }

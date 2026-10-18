@@ -45,6 +45,7 @@ import { genId } from './utils/id';
 import FocusCompanion from './components/FocusCompanion';
 import SidebarSearch, { useNookSearch, ResultsList } from './components/SidebarSearch';
 import VoiceCommandButton from './components/VoiceCommandButton';
+import { freezeLayoutAnimations } from './utils/layoutFreeze';
 import nookLogo from './nook-favicon.png';
 import AssistantChat from './components/AssistantChat';
 import { isImportableKey } from './utils/importKeys';
@@ -1530,22 +1531,22 @@ export default function App() {
             className="sidebar-brand-logo" 
             alt="Nook Logo" 
             onClick={() => {
-              if (!sidebarOpen) setSidebarOpen(true);
+              if (!sidebarOpen) { freezeLayoutAnimations(); setSidebarOpen(true); }
             }}
             style={{ cursor: !sidebarOpen ? 'pointer' : 'default' }}
             title={!sidebarOpen ? 'Expand sidebar' : ''}
           />
           <span className="sidebar-brand-name">Nook</span>
-          {sidebarOpen && (
-            <button
-              className="hdr-btn sidebar-close-btn"
-              onClick={() => setSidebarOpen(false)}
-              title="Collapse sidebar"
-              aria-label="Collapse sidebar"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-            </button>
-          )}
+          {/* Always mounted: on the rail CSS fades it out and takes it out of the tab order,
+              so collapsing doesn't pop it in/out of the layout. */}
+          <button
+            className="hdr-btn sidebar-close-btn"
+            onClick={() => { freezeLayoutAnimations(); setSidebarOpen(false); }}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
         </div>
 
         {/* Search — full widget when expanded, icon-only trigger when railed —

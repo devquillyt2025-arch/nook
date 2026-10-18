@@ -53,14 +53,33 @@ The sidebar is an **always-mounted icon rail**, not a mount/unmount toggle:
 - `true` → full 240px sidebar; `false` → 60px icon-only rail (`.main-nav--rail`).
 - The `.app` root gets `.sidebar-open` or `.sidebar-rail`; both drive `margin-left`
   on `.app-body` via `--sidebar-width` (240px) / `--sidebar-rail-width` (60px).
+- **The page changes size once when the sidebar toggles — it must never animate.** `.app-body`'s
+  `margin-left` has **no transition** (it used to ease over 250ms, so every tab re-laid-out on every frame:
+  the Journal's calendar/export card, charts and rows all visibly shrank and grew). Only the fixed sidebar
+  animates its own width. Side cards inside a tab (e.g. the Journal's right panel) should be sized from
+  the window (`vw` / fixed `clamp()`), not as an `fr` share of what's left, or they resize with the sidebar. Second cause: framer-motion `layout` rows (task rows, compact Links rows) animate
+  a *container* resize as a layout change — it only suppresses that when the *window* width changes. So
+  `App` calls `freezeLayoutAnimations()` (`utils/layoutFreeze.js`) just before flipping the sidebar and those
+  rows pass `layout={useLayoutAnimations()}`; they keep their glide for add / remove / reorder. Any new
+  `motion … layout` element in a view that sits beside the sidebar needs the same hook.
 - `nook-sidebar-open` is in `CROSS_TAB_IGNORE_KEYS` — a UI preference, so toggling
   it must not fire the cross-tab data-changed banner.
 - `useIsRail()` in `SidebarFlyout.jsx` watches `.main-nav`'s class list with a
   **`MutationObserver`** (not a media query) so the search trigger collapses in
   sync with the JS toggle.
-- CSS-only tooltips: `data-tooltip` + `::after` pseudo-element with
-  `transition-delay: 0.3s`. (Nothing sets `data-tooltip` today, and `.main-nav` clips overflow, so
-  they never actually show — the rail items use `title`.)
+- **The rail is the full sidebar, narrower — one shared geometry.** `.main-nav` has the same 6px
+  side padding in both states, so the logo, the search icon and every nav icon sit at **x=30** (the
+  centre of the 60px rail) and at the same y; rows are the same height, and the section dividers, the
+  head's bottom line and Settings' top line stay. Toggling only changes the width and **fades** the text
+  (`.nav-label`, section labels, brand name, search placeholder + shortcut — `opacity`, kept in layout;
+  `display:none` can't animate and used to re-centre the icons in the still-wide panel, so they swooped
+  across it while it shrank). Don't give the rail its own padding / button padding / `display:none` text
+  again, and check any theme override of `.main-nav` padding: the old light-theme rule
+  (`:root[data-theme="light"] .main-nav { padding: … }`) out-ranked the rail's and left its icons ~10px
+  off-centre. Search is **one** pill element in both states (it shrinks to its icon); the collapse toggle
+  stays mounted and is hidden (`visibility`) on the rail. The rail items use `title` for their names
+  (the old `data-tooltip` `::after`/`::before` rules were dead — nothing set the attribute — and the
+  `::before` one hid the active item's accent bar in the rail, so they're gone).
 - **Pinned head, scrolling list.** `.main-nav` itself doesn't scroll (`overflow: hidden`). The logo
   row and the search sit in `.sidebar-head` — pinned, with a line under it; Main / More / Utility sit
   in `.nav-scroll`, the only part that scrolls (scrollbar hidden, wheel / keyboard focus still work);
