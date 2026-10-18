@@ -91,7 +91,8 @@ are stored in `nook_custom_categories`.
 a `dueDate`, custom events (`nook-calendar-events`), and live Google Calendar events.
 Supports drag-to-reschedule (updates the task's `dueDate`/`time` or the event). An
 **Inbox** panel lists unscheduled tasks. Google Calendar events are read live and not
-persisted. Deleting a custom event asks for confirmation.
+persisted. Deleting a custom event asks for confirmation. A custom event's detail modal
+has a **reminder** picker; see Reminders below.
 
 ### Habits (`habits`)
 Habit tracker (`nook_habits`). Sticky stats/filter header (All / Daily / Weekdays /

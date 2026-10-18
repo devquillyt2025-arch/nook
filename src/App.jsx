@@ -362,6 +362,7 @@ export default function App() {
     try { localStorage.setItem(ACTIVE_TAB_KEY, activeTab); } catch {}
   }, [activeTab]);
   const [pendingOpenTaskId, setPendingOpenTaskId] = useState(null); // deep-link from Reminders tab
+  const [pendingOpenEventId, setPendingOpenEventId] = useState(null); // same, for a Nook calendar event
   const [trackers,       setTrackers]       = useState(loadTrackers);
   const [intentions,     setIntentions]     = useState(loadIntentions);
   const [editingTracker, setEditingTracker] = useState(null);
@@ -1116,14 +1117,20 @@ export default function App() {
   // tasksRef keeps this callback stable while still syncing the live list.
   const handleSyncNow    = useCallback(() => syncTasks(tasksRef.current, setTasks, setSyncStatus), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reminders tab → jump to the task that owns a reminder, opened straight to its Scheduling tab.
+  // Reminders tab → jump to the task that owns a reminder, opened straight to its Scheduling tab,
+  // or to the calendar event that owns it, opened in its detail modal. Manual ('custom')
+  // reminders have no owner; their push opens the app at '/' and lands nowhere special.
   const navigateToReminderSource = useCallback((sourceType, sourceId) => {
     if (sourceType === 'task') {
       setActiveTab('tasks');
       setPendingOpenTaskId(sourceId);
+    } else if (sourceType === 'calendar') {
+      setActiveTab('calendar');
+      setPendingOpenEventId(sourceId);
     }
   }, []);
   const clearPendingOpenTaskId = useCallback(() => setPendingOpenTaskId(null), []);
+  const clearPendingOpenEventId = useCallback(() => setPendingOpenEventId(null), []);
 
   // Deep link from a reminder push notification's notificationclick handler
   // (see public/sw.js), e.g. /?reminder=task:abc123 — opens once on load,
@@ -1764,6 +1771,8 @@ export default function App() {
               onUpdateTask={updateTaskData}
               trackers={trackers}
               habits={habits}
+              openEventId={pendingOpenEventId}
+              onEventOpened={clearPendingOpenEventId}
             />
           )}
 
