@@ -40,6 +40,7 @@ Numbers `0002` and `0005` were never used; the sequence has gaps, not missing fi
 | `0010_upsert_reminders.sql` | `upsert_reminders()` — backup-wins bulk restore of reminders |
 | `0011_restore_and_null_updatedat_guard.sql` | NULL-safe LWW guard for tasks/habits (and a repair of frozen rows); `restore_tasks()` / `restore_habits()` |
 | `0012_synced_items.sql` | `synced_items`, `upsert_synced_items()`, Realtime publication — the generic cross-device sync store |
+| `0013_custom_reminders.sql` | Widens `reminders.source_type` to allow `'custom'` (manual reminders made on the Reminders tab) |
 
 All tables have **Row-Level Security** enabled; policies scope every row to
 `auth.uid() = user_id`, so client reads never need an explicit `user_id` filter.
@@ -48,12 +49,13 @@ All tables have **Row-Level Security** enabled; policies scope every row to
 
 ### `reminders` — `0001_reminders.sql`
 When/where to fire a notification for a task or calendar event. **Not** a copy of
-the task.
+the task. The exception is a **manual** reminder (`source_type 'custom'`, added by
+`0013`): it has no owner, so the row *is* the reminder and `title` is its text.
 ```
 id, user_id,
-source_type text check in ('task','calendar'),
-source_id text,                     -- the localStorage task id or gcal event id
-title text,                         -- snapshot for the notification payload
+source_type text check in ('task','calendar','custom'),   -- 'custom' since 0013
+source_id text,                     -- localStorage task id, Nook calendar event id, or a genId() for 'custom'
+title text,                         -- snapshot for the notification payload ('custom': the reminder text itself)
 target_at timestamptz,              -- the due/start time
 reminder_at timestamptz,            -- when to fire
 reminder_offset_minutes int null,   -- non-null = computed as target_at - N min
@@ -145,7 +147,9 @@ header.
 > **Applying a migration is a manual step** (SQL editor, `supabase db push`, or the
 > Supabase MCP). Until `0012` is applied, cross-device sync pushes fail quietly and
 > Settings → Connections shows "Couldn't reach the server — N changes waiting"; the
-> app itself is unaffected.
+> app itself is unaffected. Until `0013` is applied, creating a manual reminder fails
+> with a check violation (`23514`); the Reminders tab's modal says the migration is
+> missing. Task and calendar reminders don't need it.
 
 ---
 

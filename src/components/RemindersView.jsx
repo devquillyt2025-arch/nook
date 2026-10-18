@@ -1,15 +1,23 @@
 import { memo,  useState, useEffect, useCallback, useMemo } from 'react';
-import { listReminders, groupReminders, clearReminder } from '../utils/reminders';
+import { listReminders, groupReminders, clearReminder, saveReminder } from '../utils/reminders';
 import { isAuthConfigured } from '../utils/authClient';
+import { localDateStr } from '../utils/date';
+import { genId } from '../utils/id';
+import { askConfirm } from '../utils/confirmDialog';
+import DateInput from './DateInput';
+import TimeInput from './TimeInput';
 
-// Read-only aggregated view over the `reminders` companion table — this
-// page has no independent create/delete, it only surfaces and lets you
-// jump to the task that owns each reminder (set from a task's
-// Scheduling tab). Snooze/dismiss actions land in the next pass.
+// Aggregated view over the `reminders` companion table. Task and calendar
+// reminders are set on their owner (a task's Scheduling tab, an event's detail
+// modal) and only surface here — click one to jump to it. Manual reminders
+// (source_type 'custom', migration 0013) have no owner: they're created, edited
+// and deleted right here, and the row's `title` is the reminder itself.
 export default memo(function RemindersView({ onNavigateToSource, tasks }) {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
+  // null = closed, {} = new manual reminder, a row = editing that manual reminder.
+  const [editing, setEditing]     = useState(null);
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -35,11 +43,18 @@ export default memo(function RemindersView({ onNavigateToSource, tasks }) {
   // straight away, without waiting on a refetch or a network round-trip, and so
   // rows written before renameReminder existed correct themselves on read with
   // no backfill migration. Falls back to the stored title when the task is gone
-  // or the source isn't a task.
+  // or the source isn't a task. Calendar reminders resolve the same way through
+  // the Nook events in `nook-calendar-events` (read here, not held in state —
+  // CalendarView owns that slice).
   const resolved = useMemo(() => {
     const names = new Map((tasks || []).map(t => [t.id, t.name]));
+    let events = [];
+    try { events = JSON.parse(localStorage.getItem('nook-calendar-events') || '[]'); } catch {}
+    const eventNames = new Map((Array.isArray(events) ? events : []).map(e => [e.id, e.title]));
     return reminders.map(r => {
-      const live = r.source_type === 'task' ? names.get(r.source_id) : null;
+      const live = r.source_type === 'task' ? names.get(r.source_id)
+                 : r.source_type === 'calendar' ? eventNames.get(r.source_id)
+                 : null;
       return live && live !== r.title ? { ...r, title: live } : r;
     });
   }, [reminders, tasks]);
@@ -47,13 +62,34 @@ export default memo(function RemindersView({ onNavigateToSource, tasks }) {
   const { overdue, today, upcoming } = groupReminders(resolved);
   const total = resolved.length;
 
+  const openNew = useCallback(() => setEditing({}), []);
+  const closeModal = useCallback(() => setEditing(null), []);
+  const onRowClick = useCallback((r) => {
+    if (r.source_type === 'custom') setEditing(r);
+    else onNavigateToSource?.(r.source_type, r.source_id);
+  }, [onNavigateToSource]);
+
   return (
     <div className="cdp-page">
+      {/* Pinned header, same pattern as Countdowns: the stats + the add action */}
+      <div className="cdp-head">
       <div className="cdp-stats">
         <StatCard icon={<IcoBell />} label="Total" value={total} sub="All reminders" />
         <StatCard icon={<IcoAlert />} label="Overdue" value={overdue.length} sub={overdue.length > 0 ? 'Need attention' : 'All caught up'} warn={overdue.length > 0} />
         <StatCard icon={<IcoSun />} label="Today" value={today.length} sub="Firing today" />
         <StatCard icon={<IcoClock />} label="Upcoming" value={upcoming.length} sub="Later" />
+      </div>
+      {isAuthConfigured && !loading && total > 0 && (
+        <div className="cdp-filterbar">
+          <div className="cdp-filter-group">
+            {/* cdp-filter-label: secondary, so the phone layout hides it like the other labels */}
+            <span className="cdp-filter-label">Tasks and calendar events set their own reminders. Add anything else here.</span>
+          </div>
+          <div className="cdp-filter-group">
+            <button className="add-task-btn" onClick={openNew}>＋ New Reminder</button>
+          </div>
+        </div>
+      )}
       </div>
 
       {error && (
@@ -76,20 +112,29 @@ export default memo(function RemindersView({ onNavigateToSource, tasks }) {
         <div className="cdp-empty">
           <IcoBell size={30} />
           <p className="cdp-empty-title">No reminders set</p>
-          <p className="cdp-empty-sub">Add one from a task's Scheduling tab — this page just surfaces them.</p>
+          <p className="cdp-empty-sub">Add a reminder for anything you need to remember, or set one on a task or a calendar event.</p>
+          <button className="hv-new-btn cdp-empty-btn" onClick={openNew}>＋ New Reminder</button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <ReminderGroup label="Overdue" items={overdue} tone="red" onNavigateToSource={onNavigateToSource} onDismiss={() => load(true)} />
-          <ReminderGroup label="Today" items={today} tone="accent" onNavigateToSource={onNavigateToSource} onDismiss={() => load(true)} />
-          <ReminderGroup label="Upcoming" items={upcoming} tone="muted" onNavigateToSource={onNavigateToSource} onDismiss={() => load(true)} />
+          <ReminderGroup label="Overdue" items={overdue} tone="red" onRowClick={onRowClick} onDismiss={() => load(true)} />
+          <ReminderGroup label="Today" items={today} tone="accent" onRowClick={onRowClick} onDismiss={() => load(true)} />
+          <ReminderGroup label="Upcoming" items={upcoming} tone="muted" onRowClick={onRowClick} onDismiss={() => load(true)} />
         </div>
+      )}
+
+      {editing && (
+        <ReminderModal
+          reminder={editing.id ? editing : null}
+          onClose={closeModal}
+          onSaved={() => { setEditing(null); load(true); }}
+        />
       )}
     </div>
   );
 });
 
-function ReminderGroup({ label, items, tone, onNavigateToSource, onDismiss }) {
+function ReminderGroup({ label, items, tone, onRowClick, onDismiss }) {
   if (items.length === 0) return null;
   const toneColor = tone === 'red' ? 'var(--color-red)' : tone === 'accent' ? 'var(--accent)' : 'var(--text-muted)';
   return (
@@ -99,20 +144,25 @@ function ReminderGroup({ label, items, tone, onNavigateToSource, onDismiss }) {
         <span style={{ background: 'var(--bg-input)', color: 'var(--text-muted)', padding: '1px 8px', borderRadius: 10, fontSize: '0.7rem', fontWeight: 700 }}>{items.length}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {items.map(r => <ReminderRow key={r.id} reminder={r} onNavigateToSource={onNavigateToSource} onDismiss={onDismiss} />)}
+        {items.map(r => <ReminderRow key={r.id} reminder={r} onRowClick={onRowClick} onDismiss={onDismiss} />)}
       </div>
     </section>
   );
 }
 
-function ReminderRow({ reminder, onNavigateToSource, onDismiss }) {
+function ReminderRow({ reminder, onRowClick, onDismiss }) {
   const [dismissing, setDismissing] = useState(false);
+  const isCustom = reminder.source_type === 'custom';
   const reminderTime = new Date(reminder.reminder_at);
-  const targetTime = reminder.target_at ? new Date(reminder.target_at) : null;
+  // A manual reminder's target_at is just its own fire time — no "due" to show.
+  const targetTime = reminder.target_at && !isCustom ? new Date(reminder.target_at) : null;
 
+  // Task/calendar: drops only the reminder, the task/event stays — no confirm.
+  // Manual: the row IS the reminder, so removing it deletes content — confirm.
   const handleDismiss = async (e) => {
     e.stopPropagation();
     if (dismissing) return;
+    if (isCustom && !(await askConfirm({ title: 'Delete this reminder?', message: `"${reminder.title || 'This reminder'}" will be deleted. This can't be undone.` }))) return;
     setDismissing(true);
     try {
       await clearReminder(reminder.source_type, reminder.source_id);
@@ -124,7 +174,7 @@ function ReminderRow({ reminder, onNavigateToSource, onDismiss }) {
 
   return (
     <div
-      onClick={() => onNavigateToSource?.(reminder.source_type, reminder.source_id)}
+      onClick={() => onRowClick?.(reminder)}
       style={{
         display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
         background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
@@ -139,15 +189,15 @@ function ReminderRow({ reminder, onNavigateToSource, onDismiss }) {
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{reminder.title}</span>
         <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-          Reminds {reminderTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+          {reminder.reminder_sent ? 'Reminded' : 'Reminds'} {reminderTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
           {targetTime && ` · due ${targetTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
         </span>
       </div>
       <button
         onClick={handleDismiss}
         disabled={dismissing}
-        aria-label="Dismiss reminder"
-        title="Dismiss reminder"
+        aria-label={isCustom ? 'Delete reminder' : 'Dismiss reminder'}
+        title={isCustom ? 'Delete reminder' : 'Dismiss reminder'}
         style={{
           background: 'none', border: '1px solid var(--border)', borderRadius: 6,
           cursor: dismissing ? 'default' : 'pointer', color: 'var(--text-muted)',
@@ -155,7 +205,7 @@ function ReminderRow({ reminder, onNavigateToSource, onDismiss }) {
           opacity: dismissing ? 0.5 : 1, transition: 'opacity 0.13s',
         }}
       >
-        {dismissing ? '…' : 'Dismiss'}
+        {dismissing ? '…' : isCustom ? 'Delete' : 'Dismiss'}
       </button>
     </div>
   );
@@ -163,10 +213,140 @@ function ReminderRow({ reminder, onNavigateToSource, onDismiss }) {
 
 function SourceIcon({ type }) {
   const p = { fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' };
+  if (type === 'custom') return <IcoBell size={16} />;
   if (type === 'calendar') {
     return <svg width="16" height="16" viewBox="0 0 24 24" {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
   }
   return <svg width="16" height="16" viewBox="0 0 24 24" {...p}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>;
+}
+
+// ─── Manual reminder create / edit ─────────────────────────────────
+const pad = n => String(n).padStart(2, '0');
+// Same cap send-task-reminders clips notification titles to.
+const MAX_TITLE = 200;
+
+// New reminders default to the next whole hour (which may be tomorrow).
+function defaultWhen() {
+  const d = new Date();
+  d.setHours(d.getHours() + 1, 0, 0, 0);
+  return { date: localDateStr(d), time: `${pad(d.getHours())}:00` };
+}
+
+function ReminderModal({ reminder, onClose, onSaved }) {
+  const isEdit = !!reminder;
+  const [title, setTitle] = useState(() => reminder?.title || '');
+  const [date, setDate]   = useState(() => reminder ? localDateStr(new Date(reminder.reminder_at)) : defaultWhen().date);
+  const [time, setTime]   = useState(() => {
+    if (!reminder) return defaultWhen().time;
+    const d = new Date(reminder.reminder_at);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const save = async () => {
+    if (saving) return;
+    const text = title.trim();
+    if (!text) { setError('Write what you want to be reminded about.'); return; }
+    if (!date || !time) { setError('Pick a date and a time.'); return; }
+    // Local wall-clock time, parsed as local (no Z), same as ReminderField.
+    const at = new Date(`${date}T${time}`);
+    // Saving re-arms the row (reminder_sent = false), so a past time would fire
+    // on the next cron tick. Always ask for a future one.
+    if (!(at > new Date())) { setError('Pick a time in the future.'); return; }
+    setSaving(true); setError('');
+    try {
+      await saveReminder({
+        sourceType: 'custom',
+        sourceId: reminder?.source_id || genId(),
+        title: text,
+        targetAt: null,
+        mode: 'absolute',
+        absoluteAt: `${date}T${time}`,
+        offsetMinutes: null,
+      });
+      onSaved();
+    } catch (err) {
+      // 23514 = check_violation: the database predates migration 0013.
+      setError(err?.code === '23514' || /source_type_check/.test(err?.message || '')
+        ? "Manual reminders aren't enabled on the server yet (database migration 0013 hasn't been applied)."
+        : (err?.message || 'Could not save the reminder.'));
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!(await askConfirm({ title: 'Delete this reminder?', message: `"${reminder.title || 'This reminder'}" will be deleted. This can't be undone.` }))) return;
+    setSaving(true);
+    try { await clearReminder('custom', reminder.source_id); onSaved(); }
+    catch (err) { setError(err?.message || 'Could not delete the reminder.'); setSaving(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box cdp-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="rm-modal-title">
+        <div className="cdp-modal-hdr">
+          <div className="cdp-modal-hdr-left">
+            <span className="cdp-modal-hdr-icon"><IcoBell size={16} /></span>
+            <div>
+              <span className="cdp-modal-eyebrow">Reminders</span>
+              <h3 className="cdp-modal-title" id="rm-modal-title">{isEdit ? 'Edit Reminder' : 'New Reminder'}</h3>
+            </div>
+          </div>
+          <button className="cdp-modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        <form className="cdp-modal-body" onSubmit={e => { e.preventDefault(); save(); }}>
+          <div className="cdp-field">
+            <label className="cdp-field-label" htmlFor="rm-title">Remind me to <span className="req">*</span></label>
+            <input
+              id="rm-title"
+              autoFocus
+              className={`cdp-input${error && !title.trim() ? ' cdp-input-error' : ''}`}
+              value={title}
+              maxLength={MAX_TITLE}
+              onChange={e => { setTitle(e.target.value); if (error) setError(''); }}
+              placeholder="e.g. Call the bank"
+            />
+          </div>
+          <div className="cdp-field-row">
+            <div className="cdp-field">
+              <label className="cdp-field-label">Date</label>
+              <DateInput className="cdp-date-display" iconStart value={date} min={localDateStr(new Date())}
+                onChange={e => { setDate(e.target.value); if (error) setError(''); }} aria-label="Reminder date" />
+            </div>
+            <div className="cdp-field">
+              <label className="cdp-field-label">Time</label>
+              <TimeInput className="cdp-date-display" value={time}
+                onChange={e => { setTime(e.target.value); if (error) setError(''); }} aria-label="Reminder time" />
+            </div>
+          </div>
+          <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+            Arrives as a push notification and/or email (whichever is on in Settings), even when Nook is closed.
+          </span>
+          {error && <span className="cdp-form-error">{error}</span>}
+        </form>
+
+        <div className="cdp-modal-footer">
+          {isEdit && (
+            <button type="button" className="cdp-delete-btn" onClick={remove} disabled={saving}>Delete</button>
+          )}
+          <div className="cdp-modal-footer-right">
+            <button type="button" className="cdp-btn-cancel" onClick={onClose}>Cancel</button>
+            <button type="button" className="cdp-btn-save" disabled={!title.trim() || saving} onClick={save}>
+              {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Reminder'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function StatCard({ icon, label, value, sub, warn }) {

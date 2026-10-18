@@ -124,8 +124,21 @@ unchanged.)
 ### Reminders (`reminders`)
 The **only** tab that is a pure Supabase read/write with no local mirror. Lists
 reminders grouped Overdue / Today / Upcoming. **Empty when `isAuthConfigured` is false
-or nobody is signed in.** A reminder stores only *when* to fire and *where* to send the
-user — the task/event remains the source of truth for its content.
+or nobody is signed in.** Three kinds of row:
+
+- **Task**: set in the task's Scheduling tab (`ReminderField`). Click → the task, opened on Scheduling.
+- **Calendar**: set in a **Nook** event's detail modal (the same `ReminderField`, `source_type 'calendar'`,
+  `targetAt` = the event start, or end of day for an all-day event). Click → the Calendar tab with that
+  event's modal open (`openEventId` prop). Renaming the event renames the reminder; completing or deleting it
+  clears the reminder. Google Calendar events open in Google, which has its own reminders, so they get none here.
+- **Manual** (`source_type 'custom'`, migration `0013`): created with **＋ New Reminder** (title + date +
+  time, future only), edited by clicking the row, deleted with a confirm. It has no owner, so the row's `title`
+  *is* the content and `target_at` just mirrors `reminder_at`.
+
+For task and calendar reminders, the reminder stores only *when* to fire and *where* to send the user; the
+task/event stays the source of truth for its content, and the tab resolves titles through the live task/event.
+**Dismiss** on those rows drops only the reminder, without a confirm. A row that has already fired reads
+"Reminded …" and stays under Overdue until it's dismissed or deleted.
 
 ### Notes (`notes`)
 Grid of colour-coded rich-text notes with pin + tags, search, tag/colour/date-range
@@ -259,7 +272,7 @@ button too).
 | `CalendarDatePicker.jsx` / `TimePicker.jsx` | The popup calendar and scroll-wheel time picker themselves. |
 | `FloatingPopover.jsx` | Renders a popup into `<body>`, positioned from its trigger, so nothing can clip it. See 06. |
 | `ConfirmDialog.jsx` | `ConfirmHost` — the one delete-confirmation popup behind `askConfirm()` (`utils/confirmDialog.js`); mounted once in `App.jsx`. See 06. |
-| `ReminderField.jsx` | Reminder picker used by tasks (writes to Supabase `reminders`). |
+| `ReminderField.jsx` | Reminder picker used by tasks and Nook calendar events (writes to Supabase `reminders`). |
 | `Stats.jsx` | Small stat tiles (pomodoro/day summaries), shown on the Focus tab. |
 | `WeeklyReviewModal.jsx` | Weekly review flow (`nook-weekly-reviews`). |
 | `AddTaskModal.jsx` | Task creation modal. (`AddTrackerModal.jsx` is legacy.) |
