@@ -2369,7 +2369,9 @@ kbd {
    ═══════════════════════════════════════════════════════════════════ */
 .reports-view {
   width: 100%; margin: 0 auto;
-  padding: 22px 30px 48px;
+  /* No top padding: the sticky .ra-bar is the first thing in it and supplies its own, so it starts flush
+     at the scroll-container top instead of sliding up before it pins. */
+  padding: 0 30px 48px;
   display: flex; flex-direction: column; gap: 14px;
 }
 
@@ -2621,6 +2623,18 @@ kbd {
 
 /* ── Reports: Overview / Detailed Analysis switch + the Detailed Analysis view ── */
 .ra-view-switch { display: flex; }
+/* Pinned bar — view switch, title, range buttons and the date caption stay put with a line under them
+   while the report scrolls beneath (same pattern as .al-toolbar / .cdp-head). It is the first child of
+   each view's root so sticky has the whole page to travel through; ReportsView hands the switch down. */
+.ra-bar {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; flex-direction: column; gap: 12px;
+  background: var(--bg-base);
+  padding: 24px 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ra-bar .ra-period-head { margin-bottom: 0; }
+.ra-bar .ra-range-caption { margin: 0; }
 .da { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 28px; }
 .da .ra-card { min-width: 0; }
 .da-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -5537,7 +5551,7 @@ select.modal-input {
   .tab-bar { padding: 8px 15px 0; }
   .tab-btn { padding: 7px 13px; font-size: 0.81rem; }
   .daily-view   { padding: 15px 15px 80px; }
-  .reports-view { padding: 15px 15px 80px; }
+  .reports-view { padding: 0 15px 80px; }   /* top 0: the pinned .ra-bar supplies its own */
   .timer-tab    { grid-template-columns: 1fr; padding: 18px 15px 32px; }
   .timer-left-col { position: static; }
   .timer-right-col .stats-panel { max-width: 100%; }
@@ -5583,7 +5597,7 @@ select.modal-input {
   .nav-label { display: none; }
   .tracker-type-grid { grid-template-columns: 1fr; }
   .daily-view   { padding: 11px 11px 80px; gap: 10px; }
-  .reports-view { padding: 11px 11px 80px; }
+  .reports-view { padding: 0 11px 80px; }
   .reports-global-stats { grid-template-columns: repeat(2, 1fr); }
   .rgs-val { font-size: 1.05rem; }
   .detail-stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -6130,12 +6144,13 @@ select.modal-input {
 /* Activity Log's toolbar is position:sticky. Drop the tab shell's top padding so
    the toolbar starts flush at the scroll-container top — otherwise it travels the
    32px of padding upward before pinning, which reads as "moving on first scroll".
-   Notes (.nv-bar), Links (.lk-bar), Countdowns (.cdp-head) and Today (.today-head, whose shell class
-   is yartu-tab-active) pin their headers the same way. */
+   Notes (.nv-bar), Links (.lk-bar), Countdowns (.cdp-head), Reports (.ra-bar) and Today (.today-head, whose
+   shell class is yartu-tab-active) pin their headers the same way. */
 .sunsama-tab-transition.activity-tab-active,
 .sunsama-tab-transition.notes-tab-active,
 .sunsama-tab-transition.links-tab-active,
 .sunsama-tab-transition.countdowns-tab-active,
+.sunsama-tab-transition.reports-tab-active,
 .sunsama-tab-transition.yartu-tab-active {
   padding-top: 0;
 }
@@ -8785,6 +8800,7 @@ select.modal-input {
   .sunsama-tab-transition.notes-tab-active,
   .sunsama-tab-transition.links-tab-active,
   .sunsama-tab-transition.countdowns-tab-active,
+  .sunsama-tab-transition.reports-tab-active,
   .sunsama-tab-transition.yartu-tab-active { padding-top: 0; }
   /* Tasks + Habits are "contained scroll" on desktop (the page is locked, an inner
      card scrolls). On a phone that squeezes the list into a few px, so they page-scroll. */
@@ -8796,6 +8812,20 @@ select.modal-input {
   /* views that padded themselves on top of the shell */
   .hv, .timer-tab, .cdp-page, .reports-view, .daily-view { padding-left: 0; padding-right: 0; }
   .reports-view { padding-bottom: 8px; }
+  /* pinned bar: full-bleed against the shell's 16px gutter, like the Notes / Links / Activity bars, and kept
+     small (~125px, it was up to 200px): the view's title just repeats the switch above it so it's dropped,
+     the range buttons + export icons share one line, and the date caption sits under them. */
+  .ra-bar { margin-inline: -16px; width: calc(100% + 32px); padding: 10px 16px; gap: 8px; }
+  .ra-bar .ra-view-switch .ra-seg { width: 100%; }
+  .ra-bar .ra-view-switch .ra-seg button { flex: 1; }
+  .ra-bar .analytics-section-title, .ra-bar .da-title { display: none; }
+  .ra-bar .da-head { flex-direction: column-reverse; align-items: stretch; flex-wrap: nowrap; gap: 8px; }
+  .ra-bar .ra-range-ctl { gap: 6px; width: 100%; }
+  .ra-bar .ra-range-ctl .ra-seg { flex: 1 1 auto; min-width: 0; }
+  .ra-bar .ra-range-ctl .ra-seg button { flex: 1; padding: 6px 8px; white-space: nowrap; }
+  .ra-bar .ra-range-ctl .header-actions { gap: 6px !important; flex-shrink: 0; }
+  .ra-bar .ra-range-ctl .ra-custom { order: 3; flex: 1 0 100%; justify-content: space-between; }
+  .ra-bar .ra-period-head { gap: 0; }
 
   /* ── Bottom tab bar ────────────────────────────────────────────────── */
   .mobile-bottom-nav {

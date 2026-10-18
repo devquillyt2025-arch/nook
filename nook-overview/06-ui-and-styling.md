@@ -115,11 +115,11 @@ export menu). `components/themedControls.test.js` fails if a native control is a
 
 ## Pinned headers (sticky toolbars)
 
-The Activity Log, Notes, Links, Countdowns and Today keep their toolbar on screen with a
+The Activity Log, Notes, Links, Countdowns, Reports and Today keep their toolbar on screen with a
 `border-bottom` line under it while the content scrolls beneath. The scroll container is
 **`.tab-content`** (the page itself, on phones too), so this is plain `position: sticky; top: 0;
 z-index: 30; background: var(--bg-base)` on the header — `.al-toolbar`, `.nv-bar` + `.lk-bar` (one
-shared rule), `.cdp-head`, `.today-head`. To pin another tab's header the same way: add
+shared rule), `.cdp-head`, `.ra-bar`, `.today-head`. To pin another tab's header the same way: add
 `<tab>-tab-active` to the wrapper in `App.jsx` (Today's shell class is the older `yartu-tab-active`),
 add it to the `padding-top: 0` rule in `index.css`, and give the header the sticky rule. Today's
 greeting card is trimmed while pinned (smaller padding) and on a phone shrinks to the name, a 2×2
@@ -139,6 +139,13 @@ The traps:
   ~1450px; Countdowns' stats + one filter row is ~155px). Countdowns uses `display: contents` on
   `.cdp-head` at ≤768px so the stat cards scroll away and only `.cdp-filterbar` (now a direct child of
   the page, so it can still pin) stays.
+- **A sticky bar only sticks inside its parent**, so it must be the first child of the box that holds ALL the
+  scrolling content. Reports' bar (`.ra-bar`: Overview/Detailed switch, title, range buttons, date caption)
+  is the first child of each view's root (`.analytics-dashboard` / `.da`), not of `ReportsView`; the switch
+  lives in `ReportsView`, so it's passed down as the `switcher` prop. Anything that scrolls to an anchor under
+  a pinned bar (the Detailed Analysis jump chips) must subtract the bar's height — `scrollIntoView` parks the
+  target underneath it. And an older breakpoint rule can re-add top padding to the view (`.reports-view`
+  did, at ≤900px / ≤480px): check every width for "travel" before it pins.
 - **`Select` is as wide as its wrapper**: `width: style.width || '100%'`. In a wrapping toolbar a
   `Select` with no `width` becomes a full-row item and forces its own line — pass `style.width`.
 - Dropdowns opened from a pinned header are fine: the header has no `overflow` and the `Select` list

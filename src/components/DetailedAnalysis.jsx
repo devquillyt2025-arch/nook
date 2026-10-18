@@ -51,7 +51,7 @@ const cmp      = (cur, prev) => (cur == null || prev == null ? null : delta(cur,
 const NAV = [['tasks', 'Tasks'], ['habits', 'Habits'], ['focus', 'Focus'], ['journal', 'Journal'], ['library', 'Notes & links'],
   ['calendar', 'Calendar'], ['activity', 'Activity'], ['score', 'Score'], ['reviews', 'Reviews'], ['alltime', 'All time']];
 
-export default function DetailedAnalysis({ habits = [], tasks = [], pomodoroLog = [], range, onRangeChange }) {
+export default function DetailedAnalysis({ habits = [], tasks = [], pomodoroLog = [], range, onRangeChange, switcher }) {
   // Everything outside habits / tasks / focus is read straight from localStorage, so
   // re-read when another device's change lands (see useSyncApplied in utils/).
   const [tick, setTick] = useState(0);
@@ -76,7 +76,17 @@ export default function DetailedAnalysis({ habits = [], tasks = [], pomodoroLog 
     document.body.appendChild(el); el.click(); document.body.removeChild(el);
     URL.revokeObjectURL(url);
   };
-  const jump = id => document.getElementById(`da-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // The pinned .ra-bar covers the top of the scroll container, so scroll the section to just BELOW it
+  // (scrollIntoView would park its heading underneath the bar).
+  const jump = id => {
+    const el = document.getElementById(`da-${id}`);
+    if (!el) return;
+    const sc = el.closest('.tab-content');
+    if (!sc) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    const bar = sc.querySelector('.ra-bar');
+    const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - (bar ? bar.offsetHeight : 0) - 12;
+    sc.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  };
 
   // ── Chart plumbing ──
   const label = d => (a.weekly ? `Wk of ${fmtShort(d)}` : fmtShort(d));
@@ -97,7 +107,9 @@ export default function DetailedAnalysis({ habits = [], tasks = [], pomodoroLog 
   return (
     <div className="da" id="export-analysis-area">
 
-      {/* ══ Header ══ */}
+      {/* ══ Pinned bar: view switch + title + range (the page scrolls beneath it) ══ */}
+      <div className="ra-bar">
+      {switcher}
       <div className="da-head">
         <div>
           <h2 className="da-title">Detailed Analysis</h2>
@@ -117,6 +129,7 @@ export default function DetailedAnalysis({ habits = [], tasks = [], pomodoroLog 
             </button>
           </div>
         </div>
+      </div>
       </div>
 
       <nav className="da-nav no-print" aria-label="Jump to section">

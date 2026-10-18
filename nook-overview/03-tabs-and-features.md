@@ -172,7 +172,11 @@ A **read-only** analytics dashboard (`AnalyticsDashboard`, maths in
 streak history), **Focus & Time**, **Daily Productivity Score**, completions by
 category, a 12-week **Consistency Heatmap**, and the **Weekly Review Journal**. A
 "Weekly Review" flow (`WeeklyReviewModal`, opened from Today) writes `nook-weekly-reviews`.
-There is a print-to-PDF button. `AnalyticsDashboard` registers the Chart.js components
+There is a print-to-PDF button. The top of the page — the **Overview / Detailed Analysis** switch, the
+title, the range buttons + export icons and the "Oct 6 – Oct 12 vs previous week" caption — is a **pinned bar**
+(`.ra-bar`, with a line under it) while the report scrolls beneath, like the other tabs; on a phone it drops
+the repeated title and keeps range + export on one line (~125px). See
+[06 § Pinned headers](06-ui-and-styling.md#pinned-headers-sticky-toolbars). `AnalyticsDashboard` registers the Chart.js components
 it needs itself (`register()` is idempotent — don't centralise it).
 
 A switch at the top of Reports flips between that **Overview** and a **Detailed Analysis**
