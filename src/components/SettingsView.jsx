@@ -11,6 +11,7 @@ import { useSyncStatus } from '../utils/useSyncStatus';
 import { syncNow } from '../utils/sync';
 import { connectGoogleDriveBackup, getBackupConfig, isDriveConnected, getDriveConnectionState, setBackupFrequency, getRecentRuns, runDriveBackup } from '../utils/driveBackup';
 import Select from './Select';
+import { askConfirm } from '../utils/confirmDialog';
 
 const PRESETS = [
   { label: 'Standard',  sub: '25/5/15',  vals: { focusDuration: 25, shortDuration: 5,  longDuration: 15 } },
@@ -944,8 +945,11 @@ export default memo(function SettingsView({ settings, onSaveSettings, theme, onS
               <div style={{ marginTop: 10 }}>
                 <button type="button"
                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-red)', fontSize: '0.78rem', fontWeight: 700 }}
-                  onClick={() => {
-                    if (!confirm(`Permanently delete the ${inventory.vault} old saved login${inventory.vault === 1 ? '' : 's'} (usernames and passwords) from this browser?\n\nThe Saved Logins tab no longer exists, so this is the only way to remove them other than Clear Local Data. This cannot be undone.`)) return;
+                  onClick={async () => {
+                    if (!(await askConfirm({
+                      title: `Delete ${inventory.vault} old saved login${inventory.vault === 1 ? '' : 's'}?`,
+                      message: `The usernames and passwords will be permanently deleted from this browser.\n\nThe Saved Logins tab no longer exists, so this is the only way to remove them other than Clear Local Data. This cannot be undone.`,
+                    }))) return;
                     try { localStorage.removeItem('nook_vault'); } catch {}
                     setInventory(inv => inv && { ...inv, vault: 0 });
                   }}>

@@ -9,6 +9,8 @@ import ReminderField from './ReminderField';
 import CalendarDatePicker from './CalendarDatePicker';
 import { syncTaskField } from '../utils/googleTasksSync';
 import { useSyncApplied } from '../utils/useSyncApplied';
+import { useLayoutAnimations } from '../utils/layoutFreeze';
+import { askConfirm } from '../utils/confirmDialog';
 
 
 const PRI_ORDER = { high: 0, medium: 1, low: 2, none: 3 };
@@ -95,8 +97,6 @@ function TaskRow({
   now,
   activeTaskId,
   timerRunning,
-  confirmDeleteId,
-  setConfirmDeleteId,
   kebabOpenId,
   setKebabOpenId,
   openDetail,
@@ -108,9 +108,9 @@ function TaskRow({
   ALL_CATS,
   handleNewList,
 }) {
+  const layoutAnim = useLayoutAnimations();   // off while the sidebar toggles, so rows don't animate the page resize
   const meta = CAT_META[task.category] ?? CAT_META.work;
   const isActive = task.id === activeTaskId;
-  const isConfirming = confirmDeleteId === task.id;
   const due = fmtDue(task.dueDate);
   const isOverdue = !isDone && due?.overdue;
   const priColor = !isDone && task.priority !== 'none' ? (PRI_META[task.priority]?.color ?? null) : null;
@@ -153,28 +153,17 @@ function TaskRow({
   return (
     <motion.div
       key={task.id}
-      layout
+      layout={layoutAnim}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -16 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
       className={`linear-task-row${isActive ? ' task-active' : ''}${isDone ? ' item-completed' : ''}`}
-      onClick={() => { if (!isConfirming) openDetail(task); }}
-      title={timerRunning && !isActive && !isConfirming ? 'Pause timer to switch tasks' : undefined}
+      onClick={() => openDetail(task)}
+      title={timerRunning && !isActive ? 'Pause timer to switch tasks' : undefined}
       style={{ borderLeft: cardBorderLeft }}
     >
-      {isConfirming ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '0 8px' }}>
-          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Delete this task?</span>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button type="button" style={{ background: 'transparent', border: 'none', color: 'var(--color-red)', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}
-              onClick={e => { e.stopPropagation(); onDelete(task.id); setConfirmDeleteId(null); }}>Yes</button>
-            <button type="button" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer', padding: 0 }}
-              onClick={e => { e.stopPropagation(); setConfirmDeleteId(null); }}>Cancel</button>
-          </div>
-        </div>
-      ) : (
-        <>
+      <>
           {/* Checkbox — circular, fills with category color when checked */}
           <div
             className={`linear-checkbox${isDone ? ' checked' : ''}`}
@@ -355,7 +344,10 @@ function TaskRow({
                 </button>
                 <button
                   type="button" className="kebab-menu-item" style={{ ...menuItemStyle, color: 'var(--color-red)' }}
-                  onClick={e => { e.stopPropagation(); setKebabOpenId(null); setConfirmDeleteId(task.id); }}
+                  onClick={async e => {
+                    e.stopPropagation(); setKebabOpenId(null);
+                    if (await askConfirm({ title: 'Delete this task?', message: `"${displayName(task.name)}" will be deleted. This can't be undone.` })) onDelete(task.id);
+                  }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--color-red-bg, rgba(239,68,68,0.12))'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
@@ -411,8 +403,7 @@ function TaskRow({
               <div style={{ position: 'absolute', bottom: 0, left: 0, height: 2, width: `${urgency.pct}%`, background: urgency.color, transition: 'width 500ms ease-out, background-color 500ms ease-out' }} />
             </div>
           )}
-        </>
-      )}
+      </>
     </motion.div>
   );
 }
@@ -573,7 +564,7 @@ function CompletionAnalytics({ pending, completed, onAdd, renderTask, onClearCom
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 }}>
           {completed.length > 0 && (
             <div style={{ display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button onClick={() => { if (confirm(`Delete all ${completed.length} completed task${completed.length > 1 ? 's' : ''}?`)) onClearCompleted(); }} style={{ background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--color-red)', padding: '4px 12px', borderRadius: 7, fontSize: '0.73rem', fontWeight: 600, cursor: 'pointer' }}>Clear all</button>
+              <button onClick={async () => { if (await askConfirm({ title: `Delete all ${completed.length} completed task${completed.length > 1 ? 's' : ''}?`, message: "They'll be deleted for good. This can't be undone.", confirmLabel: 'Delete all' })) onClearCompleted(); }} style={{ background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--color-red)', padding: '4px 12px', borderRadius: 7, fontSize: '0.73rem', fontWeight: 600, cursor: 'pointer' }}>Clear all</button>
             </div>
           )}
           <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
@@ -610,7 +601,6 @@ function TaskList({ tasks, activeTaskId, timerRunning, onSelect, onToggle, onDel
   const ALL_CATS = useMemo(() => Object.keys(CAT_META), [customCats]);
   const [kebabOpenId,     setKebabOpenId]     = useState(null);
   const [catFilter,       setCatFilter]       = useState('all');
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [showCompleted,   setShowCompleted]   = useState(false);
   const [sortBy,          setSortBy]          = useState(() => localStorage.getItem(LS_SORT_KEY) || 'created');
   useSyncApplied(['task_sort', 'custom_categories'], (names) => {   // another device's change, merged into storage
@@ -1019,8 +1009,6 @@ function TaskList({ tasks, activeTaskId, timerRunning, onSelect, onToggle, onDel
       now={now}
       activeTaskId={activeTaskId}
       timerRunning={timerRunning}
-      confirmDeleteId={confirmDeleteId}
-      setConfirmDeleteId={setConfirmDeleteId}
       kebabOpenId={kebabOpenId}
       setKebabOpenId={setKebabOpenId}
       openDetail={openDetail}
@@ -1442,7 +1430,10 @@ function TaskList({ tasks, activeTaskId, timerRunning, onSelect, onToggle, onDel
                             <span style={{ color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{att.name}</span>
                           </div>
                           <button type="button" style={{ background: 'transparent', border: 'none', color: 'var(--color-red)', cursor: 'pointer', padding: 4 }}
-                            onClick={() => saveField('attachments', (local.attachments || []).filter(a => a.id !== att.id))}>
+                            onClick={async () => {
+                              if (await askConfirm({ title: 'Remove this attachment?', message: `"${att.name}" will be removed from the task.`, confirmLabel: 'Remove' }))
+                                saveField('attachments', (local.attachments || []).filter(a => a.id !== att.id));
+                            }}>
                             ×
                           </button>
                         </div>
@@ -1675,7 +1666,8 @@ function TaskList({ tasks, activeTaskId, timerRunning, onSelect, onToggle, onDel
                           />
                           <button type="button"
                             style={{ background: 'transparent', border: 'none', color: 'var(--color-red)', cursor: 'pointer', padding: '0 4px', fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}
-                            onClick={() => {
+                            onClick={async () => {
+                              if (!(await askConfirm({ title: 'Delete this subtask?', message: `"${sub.text || 'Untitled subtask'}" will be deleted. This can't be undone.` }))) return;
                               if (sub.googleTaskId) {
                                 const delStr = localStorage.getItem('nook_deleted_tasks');
                                 let deletedIds = [];
@@ -1719,7 +1711,9 @@ function TaskList({ tasks, activeTaskId, timerRunning, onSelect, onToggle, onDel
               <button
                 type="button"
                 className="tdp-delete-btn"
-                onClick={() => { if (confirm(`Delete "${local.name}"?`)) { onDelete(local.id); setDetailTask(null); setLocal(null); } }}
+                onClick={async () => {
+                  if (await askConfirm({ title: 'Delete this task?', message: `"${displayName(local.name)}" will be deleted. This can't be undone.` })) { onDelete(local.id); setDetailTask(null); setLocal(null); }
+                }}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="3 6 5 6 21 6"/>

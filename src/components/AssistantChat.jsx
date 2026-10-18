@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { askAssistant } from '../utils/aiAssistant';
+import { askConfirm } from '../utils/confirmDialog';
 
 export default function AssistantChat({ isOpen, onClose }) {
   const [messages, setMessages] = useState(() => {
@@ -48,8 +49,8 @@ export default function AssistantChat({ isOpen, onClose }) {
     }
   };
 
-  const handleClear = () => {
-    if (window.confirm('Clear chat history?')) {
+  const handleClear = async () => {
+    if (await askConfirm({ title: 'Clear chat history?', message: "The whole conversation will be deleted. This can't be undone.", confirmLabel: 'Clear' })) {
       setMessages([]);
     }
   };

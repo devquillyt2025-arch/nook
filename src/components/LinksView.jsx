@@ -6,6 +6,8 @@ import { useSyncApplied } from '../utils/useSyncApplied';
 import { genId } from '../utils/id';
 import { UNCAT, catKeyOf, groupLinks } from '../utils/linkGroups';
 import { openSafeUrl } from '../utils/safeUrl';
+import { askConfirm } from '../utils/confirmDialog';
+import { useLayoutAnimations } from '../utils/layoutFreeze';
 
 const STORAGE_KEY = 'nook_links';
 const BASE_CATS = ['Personal', 'Work', 'Finance', 'Read Later', 'Entertainment'];
@@ -214,7 +216,7 @@ function GroupTile({ group, onOpen }) {
 
 // ── Link Card ─────────────────────────────────────────────────────
 function LinkCard({ link, onEdit, onDelete, onToggleStar, compact }) {
-  const [confirmDel, setConfirmDel] = useState(false);
+  const layoutAnim = useLayoutAnimations();   // off while the sidebar toggles (see utils/layoutFreeze.js)
   const cs = catStyle(link.category);
 
   // A stored url can come from sync or a backup, so only http(s) is ever opened (no javascript:/data:).
@@ -238,15 +240,9 @@ function LinkCard({ link, onEdit, onDelete, onToggleStar, compact }) {
     </button>
   );
 
-  const deleteSection = confirmDel ? (
-    <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'var(--color-red-bg)', borderRadius: 6, padding: '2px 7px' }}>
-      <span style={{ fontSize: '0.7rem', color: 'var(--color-red)', fontWeight: 600 }}>Delete?</span>
-      <button onClick={e => { e.stopPropagation(); onDelete(link.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-red)', fontWeight: 700, fontSize: '0.7rem', padding: '2px 3px' }}>Yes</button>
-      <button onClick={e => { e.stopPropagation(); setConfirmDel(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.7rem', padding: '2px 3px' }}>No</button>
-    </div>
-  ) : iconBtn('Delete', 'var(--text-muted)', 'var(--color-red-bg)', 'var(--color-red)',
+  const deleteSection = iconBtn('Delete', 'var(--text-muted)', 'var(--color-red-bg)', 'var(--color-red)',
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>,
-      () => setConfirmDel(true)
+      async () => { if (await askConfirm({ title: 'Delete this link?', message: `"${link.name || link.url}" will be deleted. This can't be undone.` })) onDelete(link.id); }
     );
 
   const actions = (
@@ -263,7 +259,7 @@ function LinkCard({ link, onEdit, onDelete, onToggleStar, compact }) {
   // ── Compact list row ──
   if (compact) {
     return (
-      <motion.div layout initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: .14 }}
+      <motion.div layout={layoutAnim} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: .14 }}
         onClick={openLink} role="link" tabIndex={0}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLink(); } }}
         aria-label={`Open ${link.name}`}

@@ -7903,6 +7903,41 @@ select.modal-input {
 .al-confirm-del.ready { background: #ef4444; color: #fff; opacity: 1; cursor: pointer; }
 .al-confirm-del.ready:hover { background: #dc2626; }
 
+/* Shared delete-confirmation popup (ConfirmDialog.jsx / askConfirm). z-index sits above
+   .modal-overlay (100) and FloatingPopover (10050) so it shows over any modal or side panel. */
+.nk-confirm-overlay {
+  position: fixed; inset: 0; z-index: 10060; padding: 20px;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeOverlay 0.13s ease;
+}
+.nk-confirm {
+  background: var(--bg-surface); border: 1px solid var(--border-strong);
+  border-radius: 14px; padding: 24px 26px;
+  max-width: 390px; width: 100%;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column;
+  animation: modalIn 0.18s var(--ease-spring);
+}
+.nk-confirm-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%; margin-bottom: 12px;
+  background: rgba(239,68,68,0.1); color: #ef4444;
+}
+.nk-confirm-title { margin: 0 0 6px; font-size: 1rem; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.nk-confirm-body  { margin: 0 0 18px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; overflow-wrap: anywhere; white-space: pre-line; }
+.nk-confirm-title + .nk-confirm-actions { margin-top: 12px; }   /* no message: title sits directly above the buttons */
+.nk-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.nk-confirm-cancel, .nk-confirm-del {
+  border-radius: 7px; padding: 7px 16px; font-size: 0.85rem; cursor: pointer; font-family: inherit;
+  transition: background 0.13s, border-color 0.13s;
+}
+.nk-confirm-cancel { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); }
+.nk-confirm-cancel:hover { background: var(--bg-hover); }
+.nk-confirm-del { background: #ef4444; border: 1px solid #ef4444; color: #fff; font-weight: 600; }
+.nk-confirm-del:hover { background: #dc2626; border-color: #dc2626; }
+.nk-confirm-cancel:focus-visible, .nk-confirm-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* Undo toast */
 .al-undo-toast {
   position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);

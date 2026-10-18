@@ -5,6 +5,7 @@ import { genId } from '../trackers/trackerUtils';
 import { logActivity, diffObjects } from '../utils/activityLog';
 import { useSyncApplied } from '../utils/useSyncApplied';
 import { localDateStr } from '../utils/date';
+import { askConfirm } from '../utils/confirmDialog';
 
 // ─── Storage ───────────────────────────────────────────────────────
 const CD_KEY = 'nook_countdowns';
@@ -426,7 +427,7 @@ function CountdownRow({ cd, pinned, onEdit, onDelete, onToggleComplete, onToggle
             >
               <CdIcoCheck />
             </button>
-            <button className="cdp-icon-btn cdp-icon-btn-danger" onClick={() => { if (confirm('Delete this countdown?')) onDelete(cd.id); }} title="Delete"><CdIcoTrash /></button>
+            <button className="cdp-icon-btn cdp-icon-btn-danger" onClick={async () => { if (await askConfirm({ title: 'Delete this countdown?', message: `"${cd.name}" will be deleted. This can't be undone.` })) onDelete(cd.id); }} title="Delete"><CdIcoTrash /></button>
           </div>
         </div>
       </div>
@@ -627,7 +628,7 @@ function CountdownModal({ onSave, onClose, editCd = null, onDelete }) {
 
         <div className="cdp-modal-footer">
           {onDelete && (
-            <button type="button" className="cdp-delete-btn" onClick={() => { if (confirm('Delete this countdown?')) onDelete(); }}>
+            <button type="button" className="cdp-delete-btn" onClick={async () => { if (await askConfirm({ title: 'Delete this countdown?', message: `"${editCd?.name || 'This countdown'}" will be deleted. This can't be undone.` })) onDelete(); }}>
               <CdIcoTrash /> Delete
             </button>
           )}

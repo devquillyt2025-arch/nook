@@ -230,5 +230,15 @@ overflow check (`scrollWidth > clientWidth`) passed on every tab while Tasks was
 - Route-level views are `lazy()`-loaded, one chunk per tab.
 - Commit convention: `type(scope): lowercase imperative summary`, scope is the tab
   (`tasks`, `journal`, `activity-log`, `reports`, `daily`, `shared`). One commit per tab.
-- Destructive actions (delete a note/task/event, clear completed tasks, clear a chat)
-  ask with `confirm()` first; that is the house style for confirmation, not a custom modal.
+- **Every delete asks in the shared themed popup, never inline and never with the native
+  `confirm()`.** `await askConfirm({ title, message, confirmLabel? })` from `utils/confirmDialog.js`
+  resolves `true` (confirmed) / `false` (cancelled); `<ConfirmHost/>` (`components/ConfirmDialog.jsx`,
+  mounted once in `App.jsx`) draws it. It is portaled to `<body>` at `z-index: 10060` (over every modal
+  and `FloatingPopover`), Escape cancels **only** the popup (capture phase + `stopPropagation`, so the
+  note editor / task side panel underneath stays open), focus starts on **Cancel** and Tab stays inside
+  it, and a backdrop click within 350 ms of opening is ignored (a double-click on a trash icon lands its
+  second click there). The handler is async — `if (await askConfirm({...})) onDelete(id)` — so re-read
+  anything stale after the `await`. Don't bring back an in-row "Delete? Yes / No" strip (Tasks and Links
+  had one) or a `window.confirm`. Not deletes, so still native: log out, disconnect Google Calendar,
+  restore a backup, and sync's account-switch prompt. The Activity Log's type-`DELETE` clear keeps its own
+  stricter modal.

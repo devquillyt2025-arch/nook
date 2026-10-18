@@ -243,6 +243,7 @@ button too).
 | `DateInput.jsx` / `TimeInput.jsx` | Themed date / time fields — **use instead of `<input type="date\|time">`**. Open `CalendarDatePicker` / `TimePicker` through `FloatingPopover`. |
 | `CalendarDatePicker.jsx` / `TimePicker.jsx` | The popup calendar and scroll-wheel time picker themselves. |
 | `FloatingPopover.jsx` | Renders a popup into `<body>`, positioned from its trigger, so nothing can clip it. See 06. |
+| `ConfirmDialog.jsx` | `ConfirmHost` — the one delete-confirmation popup behind `askConfirm()` (`utils/confirmDialog.js`); mounted once in `App.jsx`. See 06. |
 | `ReminderField.jsx` | Reminder picker used by tasks (writes to Supabase `reminders`). |
 | `Stats.jsx` | Small stat tiles (pomodoro/day summaries), shown on the Focus tab. |
 | `WeeklyReviewModal.jsx` | Weekly review flow (`nook-weekly-reviews`). |

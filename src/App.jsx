@@ -45,6 +45,8 @@ import { genId } from './utils/id';
 import FocusCompanion from './components/FocusCompanion';
 import SidebarSearch, { useNookSearch, ResultsList } from './components/SidebarSearch';
 import VoiceCommandButton from './components/VoiceCommandButton';
+import ConfirmHost from './components/ConfirmDialog';
+import { askConfirm } from './utils/confirmDialog';
 import { freezeLayoutAnimations } from './utils/layoutFreeze';
 import nookLogo from './nook-favicon.png';
 import AssistantChat from './components/AssistantChat';
@@ -477,15 +479,17 @@ export default function App() {
     window.location.reload();
   }, []);
 
-  const handleClearData = useCallback(() => {
+  const handleClearData = useCallback(async () => {
     // Copy is precise about scope on purpose: this clears localStorage only.
     // Tasks and habits also live in Supabase and are NOT deleted here — they
     // sync back down on the next load. Promising "ALL data" was misleading.
-    if (confirm(
-      "Clear all data stored in this browser?\n\n" +
-      "This deletes everything Nook keeps on this device — tasks, habits, journal, notes, links and countdowns — and cannot be undone.\n\n" +
-      "It does NOT delete your synced copies in the cloud: if you are signed in, your tasks, habits, notes, journal and other synced data will sync back down on the next load. Reminders are also kept."
-    )) {
+    if (await askConfirm({
+      title: 'Clear all data stored in this browser?',
+      message:
+        "This deletes everything Nook keeps on this device — tasks, habits, journal, notes, links and countdowns — and cannot be undone.\n\n" +
+        "It does NOT delete your synced copies in the cloud: if you are signed in, your tasks, habits, notes, journal and other synced data will sync back down on the next load. Reminders are also kept.",
+      confirmLabel: 'Clear all data',
+    })) {
       // Nook keys use BOTH prefixes: 'nook-' (tasks, settings, calendar…) and
       // 'nook_' (notes, links, countdowns, journal, goals, Google tokens/sync).
       // Match both so "Clear all data" actually clears everything — leaving the
@@ -1889,6 +1893,9 @@ export default function App() {
 
       {/* ── Toast ── */}
       {toast && <div key={toast.key} role="status" aria-live="polite" aria-atomic="true" className={`app-toast toast-${toast.type}`}>{toast.msg}</div>}
+
+      {/* ── Delete-confirmation popup (askConfirm) — one host for the whole app ── */}
+      <ConfirmHost />
 
       {/* ── Modals ── */}
       <AnimatePresence>

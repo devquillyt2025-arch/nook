@@ -116,8 +116,8 @@ function.
 - History: key **`nook_chat_history`**, capped at 200 messages by `chatStore.js`, and it is a
   **synced slice** (`chat_history`, [09](09-cross-device-sync.md)). `ChatView` registers
   `useSyncApplied(['chat_history'], …)` and returns `false` while a reply is in flight, so the
-  send flow owns `messages` until the reply lands. Clearing the conversation asks `confirm()`
-  first.
+  send flow owns `messages` until the reply lands. Clearing the conversation asks first, in
+  the shared delete popup (`askConfirm`, [06](06-ui-and-styling.md#conventions-to-match-dont-improve)).
 
 ## 3. Gemini assistant (`AssistantChat`)
 

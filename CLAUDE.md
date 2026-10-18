@@ -69,6 +69,9 @@ Timer"). Full table in
   Use `Select` / `DateInput` / `TimeInput` (popups are portaled by `FloatingPopover` so a modal
   or side panel can't clip them); `themedControls.test.js` enforces it. →
   [06](nook-overview/06-ui-and-styling.md)
+- **Every delete asks in the shared popup:** `await askConfirm({ title, message })` (`utils/confirmDialog.js`,
+  drawn by `ConfirmHost` in `App.jsx`). No native `confirm()`, no inline "Yes / No" strip. →
+  [06](nook-overview/06-ui-and-styling.md#conventions-to-match-dont-improve)
 - **`landing/` is a separate Next.js marketing app and is OFF-LIMITS** for app
   changes. Everything to change lives in `src/`.
 - **Stop before each commit.** One commit per tab (`type(scope): summary`, scope =

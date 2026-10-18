@@ -13,6 +13,7 @@ import {
 import Select from './Select';
 import { localDateStr as toISO } from '../utils/date';
 import { genId } from '../utils/id';
+import { askConfirm } from '../utils/confirmDialog';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -813,11 +814,11 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
                   <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)' }}>Mark as Completed</span>
                 </label>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button type="button" onClick={() => {
+                  <button type="button" onClick={async () => {
                     if (detailEvent.type === 'event') {
                       // Custom events have no "unscheduled" state and no other delete path,
                       // so removing them from the calendar means deleting the record.
-                      if (!confirm(`Delete "${detailEvent.title || 'this event'}"?`)) return;
+                      if (!(await askConfirm({ title: 'Delete this event?', message: `"${detailEvent.title || 'This event'}" will be deleted. This can't be undone.` }))) return;
                       const u = customEvents.filter(e => e.id !== detailEvent.id);
                       setCustomEvents(u); localStorage.setItem('nook-calendar-events', JSON.stringify(u));
                       logActivity({ module: 'calendar', entity_type: 'calendar_event', entity_id: detailEvent.id, action: 'deleted', title: detailEvent.title });
