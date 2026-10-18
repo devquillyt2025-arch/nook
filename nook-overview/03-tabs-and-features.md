@@ -108,7 +108,17 @@ badge, word/entry/streak stats, a week/month calendar of entries). **Export** op
 menu — Day / Week / Month / Year / Custom range — that builds a `.docx` through
 `utils/journalDocx.js`; the menu is rendered into `<body>` (see 06) and the custom range
 uses the themed date picker. Ctrl/Cmd+K opens an entry search palette. A remote edit of
-the day you have open is applied only when you aren't typing in it.
+the day you have open is applied only when you aren't typing in it. The top of the right
+panel is one non-wrapping row — **Search · Today · Export · Autosave**. The panel is a
+fixed-width column, `--jnx-panel-w: clamp(200px, 24vw, 340px)` on `.jnx-split`: sized from the
+**window**, never from the space beside the sidebar, so the card is the same size and in the same place
+with the sidebar open or collapsed (only the editor next to it gives up / takes the 180px — it used to be a
+3fr share, so the card visibly shrank and grew on every toggle). At 200–340px the row can't always fit, so
+`.jnx-right-controls` is a CSS **container** and Autosave, then Export, collapse to an icon via
+`@container` as it narrows (text stays in the DOM, visually hidden). Don't "fix" a squeeze by letting the
+row wrap — that is what left Search alone on its own line. (Beyond ~1840px wide the page shell is capped
+at 1600px and centred, so the whole Journal block recentres by half the sidebar's width on a toggle — size
+unchanged.)
 
 ### Reminders (`reminders`)
 The **only** tab that is a pure Supabase read/write with no local mirror. Lists

@@ -3363,6 +3363,11 @@ select.modal-input {
    .jnx-write-panel is now first in DOM); the ≥768 / ≥1024 breakpoints below
    promote it to a side-by-side grid, canvas in column 1, metadata in column 2. */
 .jnx-split {
+  /* Width of the right-hand card (stats, calendar, Search/Today/Export). It is derived from the WINDOW
+     (vw), never from the space left beside the sidebar, so toggling the sidebar can't resize it: only the
+     editor beside it gives up / takes the 180px. (It used to be a 3fr share of the remaining space, so the
+     card — calendar, buttons and all — shrank and grew every time the sidebar moved.) */
+  --jnx-panel-w: clamp(200px, 24vw, 340px);
   display: grid;
   grid-template-columns: 1fr;
   gap: 28px;
@@ -4517,18 +4522,16 @@ select.modal-input {
    than scrolling away as the user browses meta's content alongside it. */
 @media (min-width: 1024px) {
   .jnx-split {
-    /* minmax(0, Nfr), not bare Nfr — a bare fr track's minimum size defaults to
-       auto (its content's min-content width), so if anything inside .jnx-meta
-       (the KPI stat grid, the month calendar) has a wider natural minimum than
-       30% of the available space, the browser expands the track past its fr
-       share to fit it — meta renders wider than 30% regardless of the ratio
-       written here. minmax(0, Nfr) explicitly allows the track to shrink below
-       its content's minimum, so the fr ratio actually holds. Canvas is column 1
-       (7fr) and meta is column 2 (3fr) — matching .jnx-write-panel/.jnx-meta's
-       DOM order, since grid auto-placement fills columns in source order when
-       no explicit grid-column is set on either child. */
-    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    /* The canvas takes whatever is left (minmax(0, 1fr): the 0 minimum lets it shrink below its
+       content's min-content width instead of pushing the layout wider); the metadata card is a fixed
+       --jnx-panel-w column (see .jnx-split), so it is the same size with the sidebar open or collapsed.
+       Canvas is column 1 and meta column 2 — matching .jnx-write-panel/.jnx-meta's DOM order, since
+       grid auto-placement fills columns in source order when no explicit grid-column is set. */
+    grid-template-columns: minmax(0, 1fr) var(--jnx-panel-w);
     column-gap: 48px;
+    /* No grid-template-columns transition here: the track is window-sized now, so it would make the card
+       lag behind a window resize. (That transition only served the unused right-collapse block above.) */
+    transition: gap 0.25s ease, column-gap 0.25s ease;
     /* Explicit row height, independent of either column's own content or cap.
        Grid's default "auto" row sizing takes the tallest column's (capped)
        contribution as the row height — so whichever column is taller ends up
@@ -4583,10 +4586,10 @@ select.modal-input {
 /* Tablet — flexible canvas on the left, right-sized metadata column on the right */
 @media (min-width: 768px) and (max-width: 1023px) {
   .jnx-split {
-    /* minmax(0, Nfr) — same reasoning as the desktop breakpoint above. Canvas
-       is column 1 (3fr), meta is column 2 (2fr), matching DOM order. */
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    /* Same as the desktop breakpoint above: flexible canvas, fixed --jnx-panel-w metadata column. */
+    grid-template-columns: minmax(0, 1fr) var(--jnx-panel-w);
     column-gap: 32px;
+    transition: gap 0.25s ease, column-gap 0.25s ease;
     /* See the desktop breakpoint's comment above — explicit row height, +32px
        of real sticky slack (matching this breakpoint's own column-gap value),
        with the same 160px of surrounding tab-shell padding subtracted back out. */
@@ -8489,69 +8492,98 @@ select.modal-input {
 @keyframes jnxFlameFlicker { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.9); } }
 
 
-/* ── Right Column Controls — one row ────────────────────────────────────
-   Export + Autosave moved to sit beside Today, inside .jnx-right-actions,
-   instead of their own right-aligned row below (.jnx-right-end, now removed).
-   An earlier attempt at merging these into one row broke because the old
-   narrow sidebar-style panel (~339px) couldn't fit nav+search+Today+
-   Export+Autosave on one line — that was before the panel moved to the left
-   column and widened to a 3fr/2fr share of the page. flex-wrap stays on as a
-   safety net regardless of how much room the panel actually has. */
+/* ── Right Column Controls — Search · Today · Export · Autosave on ONE row ──
+   The panel is only ~190–290px wide (it is a 3fr/7fr share of the page, and the
+   sidebar rail/full toggle moves it by another ~180px), so the four controls can't
+   always keep their full size. The row never wraps. Instead .jnx-right-controls is a
+   size container and, as it narrows, Autosave and then Export fall back to an icon
+   (the text stays in the DOM, visually hidden, plus a title). Search and Today never
+   change. Container queries, not viewport media queries, because the panel's width
+   isn't a function of the window alone. */
 .jnx-right-controls {
   display: flex;
   padding: 6px 0;
+  container-type: inline-size;
 }
-/* Full width — see .jnx-meta-cal-head's comment above; justify-content: flex-end
-   still hugs the (content-sized) actions cluster to the panel's right edge,
-   which now matches the calendar's own right edge since both span 100%. */
 .jnx-right-cluster {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
   width: 100%;
+  min-width: 0;
 }
 .jnx-right-actions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
-/* Today + Export + Autosave move as one unit if the row can't fit everything —
-   flex-wrap:nowrap here means this trio either stays fully on the same line as
-   the icons, or drops to its own line together, but never splits mid-group
-   (which is what plain wrap on .jnx-right-actions alone would do). */
+.jnx-right-actions .jnx-icon-action { width: 30px; height: 30px; }
+/* Today · Export · Autosave: Autosave is pushed to the panel's right edge. */
 .jnx-right-today-group {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
+.jnx-right-today-group .jnx-today-btn { padding: 7px 10px; flex-shrink: 0; }
 .jnx-right-actions .jnx-export-dropdown {
   position: relative;
 }
 .jnx-right-actions .jnx-export-trigger {
   width: auto;
   justify-content: flex-start;
+  padding: 6px 9px;
 }
-/* Autosave as a status pill, matching the icon row's line-height instead of
-   floating as bare text. Uses confirmed-real tokens (--bg-hover, --jnx-line) —
-   not --surface-2/--border-soft, which the nearby .jnx-kpi-card used to
-   reference but which are never defined anywhere in this file. */
+/* Autosave as a status pill. Fixed width so swapping "Autosave" ⇄ "Saving…" ⇄ "Saved"
+   while typing never resizes it; margin-left:auto keeps it on the right edge. Uses
+   tokens that exist (--bg-hover, --jnx-line). */
 .jnx-right-controls .jnx-status {
-  padding: 4px 10px;
+  position: relative;
+  margin-left: auto;
+  padding: 4px 8px;
   border-radius: 999px;
   background: var(--bg-hover);
   border: 1px solid var(--jnx-line);
-  /* Pin the width so swapping "Autosave" ⇄ "Saving…" ⇄ "Saved" while typing can't
-     reflow the flex row and jitter the Today/Export buttons beside it. Fixed (not
-     just min-) width sized above the widest state ("Saving…" + pulsing dot + gap),
-     so the box never grows or shrinks and content just re-centres in place. */
-  width: 100px;
+  font-size: 0.74rem;
+  gap: 5px;
+  width: 78px;
   flex: 0 0 auto;
   justify-content: center;
   box-sizing: border-box;
+}
+.jnx-status-dot-idle { display: none; animation: none; opacity: 0.45; }
+
+/* Step 1 — too narrow for the Autosave text: it becomes a status dot / check. */
+@container (max-width: 283px) {
+  .jnx-right-controls .jnx-status { width: 30px; height: 29px; padding: 0; }
+  .jnx-right-controls .jnx-status-dot-idle { display: inline-block; }
+  .jnx-right-controls .jnx-status-txt {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+}
+/* Step 2 — still too narrow: Export becomes just its icon. */
+@container (max-width: 232px) {
+  .jnx-right-actions .jnx-export-trigger { padding: 6px 8px; }
+  .jnx-right-actions .jnx-export-trigger > svg:last-child { display: none; }
+  .jnx-right-actions .jnx-export-txt {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+}
+/* Step 3 — a tablet-width window with the full sidebar open leaves ~145px: tighten the spacing
+   (the row can then overrun into the panel's own 18px padding at most, never out of the card). */
+@container (max-width: 175px) {
+  .jnx-right-cluster, .jnx-right-actions, .jnx-right-today-group { gap: 4px; }
+  .jnx-right-actions .jnx-icon-action { width: 28px; }
+  .jnx-right-today-group .jnx-today-btn { padding: 7px 8px; }
+  .jnx-right-controls .jnx-status { width: 28px; }
 }
 
 /* ── Write Panel: pure canvas, no chrome ───────────────────────────── */

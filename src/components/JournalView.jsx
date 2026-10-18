@@ -678,12 +678,10 @@ export default memo(function JournalView() {
                 <button className="jnx-icon-action" onClick={() => setPaletteOpen(true)} title="Search entries (Ctrl+K)" aria-label="Search entries">
                   <JIcoSearch />
                 </button>
-                {/* Today + Export + Autosave grouped in one non-wrapping unit: if the row
-                    is too narrow for everything, this whole group drops to its own line
-                    together (still Today-Export-Autosave side by side) instead of Autosave
-                    splitting off alone — the exact "disconnected" problem this is fixing.
-                    Only this outer placement changed — the export dropdown's own
-                    contents/logic below are untouched. */}
+                {/* Search · Today · Export · Autosave always share ONE row (no wrapping). The panel
+                    is only ~190–290px wide, so when it can't fit them the CSS collapses Export and
+                    then Autosave to icon-only (container queries on .jnx-right-controls) — the
+                    .jnx-export-txt / .jnx-status-txt spans exist for that. */}
                 <div className="jnx-right-today-group">
                 <button
                   className={`jnx-today-btn${isToday ? ' jnx-today-btn-current' : ''}`}
@@ -702,7 +700,7 @@ export default memo(function JournalView() {
                 title="Export journal as .docx"
               >
                 {exporting ? <span className="jnx-export-spin" aria-hidden="true" /> : <JIcoDoc />}
-                Export
+                <span className="jnx-export-txt">Export</span>
                 <JIcoChevronDown />
               </button>
 
@@ -771,10 +769,10 @@ export default memo(function JournalView() {
                   {exportMsg && <div className="jnx-export-msg" role="status" aria-live="polite">{exportMsg}</div>}
                 </div>, document.body)}
             </div>
-                <span className={`jnx-status jnx-status-${saveStatus}`}>
-                  {saveStatus === 'saving' && <><span className="jnx-status-dot" /> Saving…</>}
-                  {saveStatus === 'saved' && <><JIcoCheck /> Saved</>}
-                  {saveStatus === 'idle' && <span className="jnx-status-idle">Autosave</span>}
+                <span className={`jnx-status jnx-status-${saveStatus}`} title={saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : 'Autosave is on'}>
+                  {saveStatus === 'saving' && <><span className="jnx-status-dot" /><span className="jnx-status-txt">Saving…</span></>}
+                  {saveStatus === 'saved' && <><JIcoCheck /><span className="jnx-status-txt">Saved</span></>}
+                  {saveStatus === 'idle' && <><span className="jnx-status-dot jnx-status-dot-idle" /><span className="jnx-status-txt jnx-status-idle">Autosave</span></>}
                 </span>
                 </div>
               </div>
