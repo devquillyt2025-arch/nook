@@ -69,6 +69,9 @@ Timer"). Full table in
   Use `Select` / `DateInput` / `TimeInput` (popups are portaled by `FloatingPopover` so a modal
   or side panel can't clip them); `themedControls.test.js` enforces it. →
   [06](nook-overview/06-ui-and-styling.md)
+- **Every delete asks in the shared popup:** `await askConfirm({ title, message })` (`utils/confirmDialog.js`,
+  drawn by `ConfirmHost` in `App.jsx`). No native `confirm()`, no inline "Yes / No" strip. →
+  [06](nook-overview/06-ui-and-styling.md#conventions-to-match-dont-improve)
 - **`landing/` is a separate Next.js marketing app and is OFF-LIMITS** for app
   changes. Everything to change lives in `src/`.
 - **Stop before each commit.** One commit per tab (`type(scope): summary`, scope =
@@ -87,6 +90,10 @@ Timer"). Full table in
 - **Never put a secret behind a `VITE_` prefix** — Vite inlines it into the shipped
   bundle. Client secrets belong only in edge-function env.
   → [05](nook-overview/05-backend.md), [07](nook-overview/07-build-and-setup.md)
+- **Stored text is untrusted — never turn it into HTML or a URL unchecked.** Journal HTML goes through
+  `utils/sanitizeHtml.js` (never `el.innerHTML = stored`, even on a detached element); URLs from data go through
+  `utils/safeUrl.js`; a backup import may only write keys `utils/importKeys.js` allows. A new third-party host needs
+  `vercel.json`'s CSP updated. → [05 § Security posture](nook-overview/05-backend.md#security-posture)
 - **`vite build` passing is NOT verification.** No TS/lint — it will build a
   render-time `ReferenceError`. Verify by driving the real app. To run gate-free,
   point Vite's `envDir` at a dir holding an empty `.env`; do **not** edit or move

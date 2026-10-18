@@ -65,7 +65,7 @@ you rebuild the app, matching these keys and shapes gives you data compatibility
 | `nook-last-export` | timestamp of the last manual backup export | **device** |
 | `nook-visits` | visit counter (PWA install nudge) | **device** |
 | `nook-install-dismissed` | PWA install prompt dismissal | **device** |
-| `nook_ai_api_key` | the user's Gemini key, typed in Settings (**a credential**) | **device** — never synced |
+| `nook_ai_api_key` | the user's Gemini key, typed in Settings (**a credential**) | **device** — never synced, **excluded from backups** (and Drive backups) and never restored by an import |
 | `nook_ai_chat_history` | the hidden Gemini assistant panel's messages | **device** |
 
 > `nook-session-visited` is a **sessionStorage** key (per-tab-session), not localStorage.

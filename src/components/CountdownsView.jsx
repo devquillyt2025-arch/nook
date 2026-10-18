@@ -5,6 +5,7 @@ import { genId } from '../trackers/trackerUtils';
 import { logActivity, diffObjects } from '../utils/activityLog';
 import { useSyncApplied } from '../utils/useSyncApplied';
 import { localDateStr } from '../utils/date';
+import { askConfirm } from '../utils/confirmDialog';
 
 // ─── Storage ───────────────────────────────────────────────────────
 const CD_KEY = 'nook_countdowns';
@@ -39,8 +40,10 @@ const PRIORITY_META = {
 };
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
 
+// Filter-bar controls (select pills, the priority segment, Add button) share ONE height (32px) and ONE text
+// size (0.8rem); the dropdown list uses the same size (menuFontSize) instead of Select's 0.95rem default.
 const SELECT_PILL_STYLE = {
-  width: 160, padding: '8px 14px', background: 'var(--bg-hover)', border: 'none',
+  width: 160, height: 32, padding: '0 14px', background: 'var(--bg-hover)', border: 'none',
   borderRadius: 999, color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 600,
 };
 
@@ -227,7 +230,7 @@ export default memo(function CountdownsView() {
         <div className="cdp-filterbar">
           <div className="cdp-filter-group">
             <span className="cdp-filter-label">Category</span>
-            <Select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} options={categoryOptions} style={SELECT_PILL_STYLE} />
+            <Select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} options={categoryOptions} style={SELECT_PILL_STYLE} menuFontSize="0.8rem" />
             <span className="cdp-filter-label">Priority</span>
             <div className="cdp-segment">
               {Object.entries(PRIORITY_META).map(([key, m]) => (
@@ -245,7 +248,7 @@ export default memo(function CountdownsView() {
           </div>
           <div className="cdp-filter-group">
             <span className="cdp-filter-label">Sort</span>
-            <Select value={sortBy} onChange={e => setSortBy(e.target.value)} options={sortOptions} style={{ ...SELECT_PILL_STYLE, width: 130 }} />
+            <Select value={sortBy} onChange={e => setSortBy(e.target.value)} options={sortOptions} style={{ ...SELECT_PILL_STYLE, width: 130 }} menuFontSize="0.8rem" />
             <span className="cdp-count-label">{finalList.length} of {totalCount} shown</span>
             {/* Add Countdown — primary action, moved here from the removed page header */}
             <button className="add-task-btn" onClick={() => setShowModal(true)}>＋ Add Countdown</button>
@@ -426,7 +429,7 @@ function CountdownRow({ cd, pinned, onEdit, onDelete, onToggleComplete, onToggle
             >
               <CdIcoCheck />
             </button>
-            <button className="cdp-icon-btn cdp-icon-btn-danger" onClick={() => { if (confirm('Delete this countdown?')) onDelete(cd.id); }} title="Delete"><CdIcoTrash /></button>
+            <button className="cdp-icon-btn cdp-icon-btn-danger" onClick={async () => { if (await askConfirm({ title: 'Delete this countdown?', message: `"${cd.name}" will be deleted. This can't be undone.` })) onDelete(cd.id); }} title="Delete"><CdIcoTrash /></button>
           </div>
         </div>
       </div>
@@ -627,7 +630,7 @@ function CountdownModal({ onSave, onClose, editCd = null, onDelete }) {
 
         <div className="cdp-modal-footer">
           {onDelete && (
-            <button type="button" className="cdp-delete-btn" onClick={() => { if (confirm('Delete this countdown?')) onDelete(); }}>
+            <button type="button" className="cdp-delete-btn" onClick={async () => { if (await askConfirm({ title: 'Delete this countdown?', message: `"${editCd?.name || 'This countdown'}" will be deleted. This can't be undone.` })) onDelete(); }}>
               <CdIcoTrash /> Delete
             </button>
           )}

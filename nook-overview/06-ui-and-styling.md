@@ -53,14 +53,33 @@ The sidebar is an **always-mounted icon rail**, not a mount/unmount toggle:
 - `true` → full 240px sidebar; `false` → 60px icon-only rail (`.main-nav--rail`).
 - The `.app` root gets `.sidebar-open` or `.sidebar-rail`; both drive `margin-left`
   on `.app-body` via `--sidebar-width` (240px) / `--sidebar-rail-width` (60px).
+- **The page changes size once when the sidebar toggles — it must never animate.** `.app-body`'s
+  `margin-left` has **no transition** (it used to ease over 250ms, so every tab re-laid-out on every frame:
+  the Journal's calendar/export card, charts and rows all visibly shrank and grew). Only the fixed sidebar
+  animates its own width. Side cards inside a tab (e.g. the Journal's right panel) should be sized from
+  the window (`vw` / fixed `clamp()`), not as an `fr` share of what's left, or they resize with the sidebar. Second cause: framer-motion `layout` rows (task rows, compact Links rows) animate
+  a *container* resize as a layout change — it only suppresses that when the *window* width changes. So
+  `App` calls `freezeLayoutAnimations()` (`utils/layoutFreeze.js`) just before flipping the sidebar and those
+  rows pass `layout={useLayoutAnimations()}`; they keep their glide for add / remove / reorder. Any new
+  `motion … layout` element in a view that sits beside the sidebar needs the same hook.
 - `nook-sidebar-open` is in `CROSS_TAB_IGNORE_KEYS` — a UI preference, so toggling
   it must not fire the cross-tab data-changed banner.
 - `useIsRail()` in `SidebarFlyout.jsx` watches `.main-nav`'s class list with a
   **`MutationObserver`** (not a media query) so the search trigger collapses in
   sync with the JS toggle.
-- CSS-only tooltips: `data-tooltip` + `::after` pseudo-element with
-  `transition-delay: 0.3s`. (Nothing sets `data-tooltip` today, and `.main-nav` clips overflow, so
-  they never actually show — the rail items use `title`.)
+- **The rail is the full sidebar, narrower — one shared geometry.** `.main-nav` has the same 6px
+  side padding in both states, so the logo, the search icon and every nav icon sit at **x=30** (the
+  centre of the 60px rail) and at the same y; rows are the same height, and the section dividers, the
+  head's bottom line and Settings' top line stay. Toggling only changes the width and **fades** the text
+  (`.nav-label`, section labels, brand name, search placeholder + shortcut — `opacity`, kept in layout;
+  `display:none` can't animate and used to re-centre the icons in the still-wide panel, so they swooped
+  across it while it shrank). Don't give the rail its own padding / button padding / `display:none` text
+  again, and check any theme override of `.main-nav` padding: the old light-theme rule
+  (`:root[data-theme="light"] .main-nav { padding: … }`) out-ranked the rail's and left its icons ~10px
+  off-centre. Search is **one** pill element in both states (it shrinks to its icon); the collapse toggle
+  stays mounted and is hidden (`visibility`) on the rail. The rail items use `title` for their names
+  (the old `data-tooltip` `::after`/`::before` rules were dead — nothing set the attribute — and the
+  `::before` one hid the active item's accent bar in the rail, so they're gone).
 - **Pinned head, scrolling list.** `.main-nav` itself doesn't scroll (`overflow: hidden`). The logo
   row and the search sit in `.sidebar-head` — pinned, with a line under it; Main / More / Utility sit
   in `.nav-scroll`, the only part that scrolls (scrollbar hidden, wheel / keyboard focus still work);
@@ -81,7 +100,7 @@ they ignore the app theme. So Nook has none: every dropdown, date and time field
 
 | Need | Use | Notes |
 |---|---|---|
-| Dropdown | `components/Select.jsx` | `options=[{value,label,color?}]`; `onChange` gets `{ target: { value } }` |
+| Dropdown | `components/Select.jsx` | `options=[{value,label,color?}]`; `onChange` gets `{ target: { value } }`; the list's text is `0.95rem` unless a compact trigger passes `menuFontSize` (the Countdowns filter bar uses `0.8rem` so the list matches its 0.8rem trigger) |
 | Date | `components/DateInput.jsx` | drop-in for `<input type="date">`: `value` `'YYYY-MM-DD'`, `min`/`max`, `required`; opens `CalendarDatePicker` |
 | Time | `components/TimeInput.jsx` | drop-in for `<input type="time">`: `value` `'HH:MM'`; opens the scroll-wheel `TimePicker`; optional times get a "Clear" |
 
@@ -96,11 +115,11 @@ export menu). `components/themedControls.test.js` fails if a native control is a
 
 ## Pinned headers (sticky toolbars)
 
-The Activity Log, Notes, Links, Countdowns and Today keep their toolbar on screen with a
+The Activity Log, Notes, Links, Countdowns, Reports and Today keep their toolbar on screen with a
 `border-bottom` line under it while the content scrolls beneath. The scroll container is
 **`.tab-content`** (the page itself, on phones too), so this is plain `position: sticky; top: 0;
 z-index: 30; background: var(--bg-base)` on the header — `.al-toolbar`, `.nv-bar` + `.lk-bar` (one
-shared rule), `.cdp-head`, `.today-head`. To pin another tab's header the same way: add
+shared rule), `.cdp-head`, `.ra-bar`, `.today-head`. To pin another tab's header the same way: add
 `<tab>-tab-active` to the wrapper in `App.jsx` (Today's shell class is the older `yartu-tab-active`),
 add it to the `padding-top: 0` rule in `index.css`, and give the header the sticky rule. Today's
 greeting card is trimmed while pinned (smaller padding) and on a phone shrinks to the name, a 2×2
@@ -120,6 +139,13 @@ The traps:
   ~1450px; Countdowns' stats + one filter row is ~155px). Countdowns uses `display: contents` on
   `.cdp-head` at ≤768px so the stat cards scroll away and only `.cdp-filterbar` (now a direct child of
   the page, so it can still pin) stays.
+- **A sticky bar only sticks inside its parent**, so it must be the first child of the box that holds ALL the
+  scrolling content. Reports' bar (`.ra-bar`: Overview/Detailed switch, title, range buttons, date caption)
+  is the first child of each view's root (`.analytics-dashboard` / `.da`), not of `ReportsView`; the switch
+  lives in `ReportsView`, so it's passed down as the `switcher` prop. Anything that scrolls to an anchor under
+  a pinned bar (the Detailed Analysis jump chips) must subtract the bar's height — `scrollIntoView` parks the
+  target underneath it. And an older breakpoint rule can re-add top padding to the view (`.reports-view`
+  did, at ≤900px / ≤480px): check every width for "travel" before it pins.
 - **`Select` is as wide as its wrapper**: `width: style.width || '100%'`. In a wrapping toolbar a
   `Select` with no `width` becomes a full-row item and forces its own line — pass `style.width`.
 - Dropdowns opened from a pinned header are fine: the header has no `overflow` and the `Select` list
@@ -170,6 +196,39 @@ is locked to `100dvh` (`html,body{overflow:hidden}`) and each tab wrapper is
 bounded to the viewport via a `*-tab-active` class so only the inner content
 scrolls, not the page. Mobile keeps normal page scroll.
 
+### The mobile layer (≤768px)
+
+One block at the very **end of `index.css`** (`/* ═══ MOBILE APP LAYER`) turns the desktop layouts into a
+phone app. It sits last on purpose — it overrides the per-view rules above instead of editing each — and it is
+all inside one `@media (max-width: 768px)`, so desktop is untouched. The rules that hold it together:
+
+- **The tab shell owns the gutter.** `.sunsama-tab-transition` is 16px on the sides; a view must not pad itself
+  sideways on top of it (that stacked 36px + 11–24px and put content ~55px in on a 390px screen). Pinned bars
+  (`.nv-bar`, `.lk-bar`, `.al-toolbar`, `.cdp-filterbar`) go full-bleed with `margin-inline: -16px;
+  width: calc(100% + 32px); padding-inline: 16px`. Set the **width** too — an explicit `width: 100%` otherwise
+  shifts the bar left and leaves it 16px short on the right.
+- **Everything page-scrolls.** Tasks and Habits are contained-scroll on desktop (locked page, an inner card
+  scrolls). On a phone that clipped the Pending Tasks card to ~100px and hid the whole task list, so the layer
+  releases `overflow`/`flex` on `.tasks-tab-active` / `.habits-tab-active` and their inner cards.
+- **A pinned bar must stay small.** Filters that wrapped onto four rows become one **scrolling chip row**.
+  Where the controls were loose siblings they are wrapped in `.nv-filters` (Notes) / `.al-filters` (Activity
+  Log): `display: contents` on desktop (the original flat row, unchanged), a `display: flex; overflow-x: auto`
+  row on phones. Do the same for any new toolbar rather than letting it wrap.
+- **Inline styles need `!important`.** Many toolbars set sizes inline (`flex`, `width`, `fontSize`,
+  `gridTemplateColumns`); the layer matches them with `!important` or an attribute selector
+  (`[style*="repeat(7, 1fr)"]` for the Calendar grids, where `1fr` lets one long event title widen a column).
+- **`height: 100%` inside a wrapping flex/grid toolbar is a trap** — it resolves against the toolbar's own
+  height. `.al-count-txt` did, came out 208px tall, and drew a stray line down the log with the gear and refresh
+  buttons landing on the rows. The mobile toolbar gives it `height: auto`.
+- **Bottom tab bar:** equal-width items; the active one is an accent pill behind the icon (no bordered box);
+  `env(safe-area-inset-bottom)` padding. `viewport-fit=cover` is set in `index.html` and `.app` pads for the
+  other insets. The **More** sheet is a 3-column grid (nine destinations = 3×3).
+- **A task row is two lines** (title; then icons · category · due date) via CSS grid. The desktop single line
+  has fixed 96px + 118px columns that left the title 0px wide at 390px.
+
+Verify a phone change at **360, 390 and 428** (and 768), dark and light, and *look at the screenshot*: the
+overflow check (`scrollWidth > clientWidth`) passed on every tab while Tasks was showing no tasks at all.
+
 ## Conventions to match (don't "improve")
 
 - Terse style: aligned `const` blocks, single-line guards, `try {} catch {}` around
@@ -178,5 +237,15 @@ scrolls, not the page. Mobile keeps normal page scroll.
 - Route-level views are `lazy()`-loaded, one chunk per tab.
 - Commit convention: `type(scope): lowercase imperative summary`, scope is the tab
   (`tasks`, `journal`, `activity-log`, `reports`, `daily`, `shared`). One commit per tab.
-- Destructive actions (delete a note/task/event, clear completed tasks, clear a chat)
-  ask with `confirm()` first; that is the house style for confirmation, not a custom modal.
+- **Every delete asks in the shared themed popup, never inline and never with the native
+  `confirm()`.** `await askConfirm({ title, message, confirmLabel? })` from `utils/confirmDialog.js`
+  resolves `true` (confirmed) / `false` (cancelled); `<ConfirmHost/>` (`components/ConfirmDialog.jsx`,
+  mounted once in `App.jsx`) draws it. It is portaled to `<body>` at `z-index: 10060` (over every modal
+  and `FloatingPopover`), Escape cancels **only** the popup (capture phase + `stopPropagation`, so the
+  note editor / task side panel underneath stays open), focus starts on **Cancel** and Tab stays inside
+  it, and a backdrop click within 350 ms of opening is ignored (a double-click on a trash icon lands its
+  second click there). The handler is async — `if (await askConfirm({...})) onDelete(id)` — so re-read
+  anything stale after the `await`. Don't bring back an in-row "Delete? Yes / No" strip (Tasks and Links
+  had one) or a `window.confirm`. Not deletes, so still native: log out, disconnect Google Calendar,
+  restore a backup, and sync's account-switch prompt. The Activity Log's type-`DELETE` clear keeps its own
+  stricter modal.

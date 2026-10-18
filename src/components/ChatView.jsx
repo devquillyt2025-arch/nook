@@ -6,6 +6,7 @@ import { isAuthConfigured } from '../utils/authClient';
 import { useSpeechToText, isSpeechRecognitionSupported } from '../utils/useSpeechToText';
 import { useOnlineStatus } from '../utils/useOnlineStatus';
 import { useSyncApplied } from '../utils/useSyncApplied';
+import { askConfirm } from '../utils/confirmDialog';
 
 const speechSynthesisSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
@@ -108,7 +109,7 @@ export default memo(function ChatView() {
             className="hdr-btn"
             title="Clear conversation"
             aria-label="Clear conversation"
-            onClick={() => { if (confirm('Clear this conversation?')) { clearChatHistory(); setMessages([]); setError(''); } }}
+            onClick={async () => { if (await askConfirm({ title: 'Clear this conversation?', message: "The whole conversation will be deleted. This can't be undone.", confirmLabel: 'Clear' })) { clearChatHistory(); setMessages([]); setError(''); } }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>

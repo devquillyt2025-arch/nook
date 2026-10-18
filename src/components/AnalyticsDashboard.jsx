@@ -31,7 +31,7 @@ ChartJS.register(
 
 // Reports = read-only cross-tab analytics over the real tabs: Habits, Tasks,
 // Focus and Journal. No trackers.
-export default function AnalyticsDashboard({ habits = [], tasks = [], pomodoroLog = [], range, onRangeChange }) {
+export default function AnalyticsDashboard({ habits = [], tasks = [], pomodoroLog = [], range, onRangeChange, switcher }) {
   const todayStr = getTodayStr();
 
   // ── Time range + same-length previous-period comparison ──
@@ -166,8 +166,9 @@ export default function AnalyticsDashboard({ habits = [], tasks = [], pomodoroLo
   return (
     <div className="analytics-dashboard" id="export-dashboard-area" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-      {/* ══ Period overview + same-length comparison ══ */}
-      <div className="analytics-section">
+      {/* ══ Pinned bar: view switch + period + range (the page scrolls beneath it) ══ */}
+      <div className="ra-bar">
+        {switcher}
         <div className="ra-period-head">
           <h2 className="analytics-section-title" style={sectionTitle}>Period Overview</h2>
           <div className="ra-range-ctl no-print">
@@ -183,6 +184,10 @@ export default function AnalyticsDashboard({ habits = [], tasks = [], pomodoroLo
           </div>
         </div>
         <div className="ra-range-caption">{fmtShort(start)} – {fmtShort(end)} vs previous {label}</div>
+      </div>
+
+      {/* ══ Period overview + same-length comparison ══ */}
+      <div className="analytics-section">
         <div className="ra-kpis">
           <KpiTile label="Habit completion" value={`${R.habitCur.rate}%`} sub={`${R.habitCur.done}/${R.habitCur.due} scheduled`} d={dHabit} unit="pt" periodLabel={label} />
           <KpiTile label="Tasks completed"  value={R.tasksCur} d={dTasks} periodLabel={label} />

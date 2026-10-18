@@ -45,8 +45,12 @@ import { genId } from './utils/id';
 import FocusCompanion from './components/FocusCompanion';
 import SidebarSearch, { useNookSearch, ResultsList } from './components/SidebarSearch';
 import VoiceCommandButton from './components/VoiceCommandButton';
+import ConfirmHost from './components/ConfirmDialog';
+import { askConfirm } from './utils/confirmDialog';
+import { freezeLayoutAnimations } from './utils/layoutFreeze';
 import nookLogo from './nook-favicon.png';
 import AssistantChat from './components/AssistantChat';
+import { isImportableKey } from './utils/importKeys';
 
 // ── Code-split route-level views (each tab's chunk loads only when that tab is opened) ──
 const ReportsView     = lazy(() => import('./components/ReportsView'));
@@ -358,6 +362,7 @@ export default function App() {
     try { localStorage.setItem(ACTIVE_TAB_KEY, activeTab); } catch {}
   }, [activeTab]);
   const [pendingOpenTaskId, setPendingOpenTaskId] = useState(null); // deep-link from Reminders tab
+  const [pendingOpenEventId, setPendingOpenEventId] = useState(null); // same, for a Nook calendar event
   const [trackers,       setTrackers]       = useState(loadTrackers);
   const [intentions,     setIntentions]     = useState(loadIntentions);
   const [editingTracker, setEditingTracker] = useState(null);
@@ -377,10 +382,9 @@ export default function App() {
     const isSchemaV1 = data?.schemaVersion === 1 && data?.data?.local;
     const localMap = isSchemaV1 ? data.data.local : data;
 
-    const ALLOWED_PREFIX = /^nook[-_]/;
-    const BLOCKED_KEYS = new Set(['nook_google_tokens','nook_pkce_verifier','nook_sync_queue','nook_deleted_tasks']);
-
-    const keyCount = Object.keys(localMap).filter(k => ALLOWED_PREFIX.test(k) && !BLOCKED_KEYS.has(k)).length;
+    // A backup file is untrusted input — which keys it may write is decided in utils/importKeys.js
+    // (nook-/nook_ only, never tokens, PKCE, sync queues or the stored API key).
+    const keyCount = Object.keys(localMap).filter(isImportableKey).length;
     if (!confirm(`This will replace ${keyCount} data set(s) with the backup. Continue?`)) return;
 
     // Cross-device sync is merged, never destructive: while the backup is being
@@ -389,8 +393,7 @@ export default function App() {
     // signed-in device.
     await runAdditiveSync(async () => {
       for (const [key, value] of Object.entries(localMap)) {
-        if (!ALLOWED_PREFIX.test(key)) continue;      // reject non-nook keys
-        if (BLOCKED_KEYS.has(key)) continue;           // never restore tokens/queues
+        if (!isImportableKey(key)) continue;           // non-nook keys, tokens, queues, API key
         try {
           // value is already parsed; re-stringify for localStorage
           localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
@@ -477,15 +480,17 @@ export default function App() {
     window.location.reload();
   }, []);
 
-  const handleClearData = useCallback(() => {
+  const handleClearData = useCallback(async () => {
     // Copy is precise about scope on purpose: this clears localStorage only.
     // Tasks and habits also live in Supabase and are NOT deleted here — they
     // sync back down on the next load. Promising "ALL data" was misleading.
-    if (confirm(
-      "Clear all data stored in this browser?\n\n" +
-      "This deletes everything Nook keeps on this device — tasks, habits, journal, notes, links and countdowns — and cannot be undone.\n\n" +
-      "It does NOT delete your synced copies in the cloud: if you are signed in, your tasks, habits, notes, journal and other synced data will sync back down on the next load. Reminders are also kept."
-    )) {
+    if (await askConfirm({
+      title: 'Clear all data stored in this browser?',
+      message:
+        "This deletes everything Nook keeps on this device — tasks, habits, journal, notes, links and countdowns — and cannot be undone.\n\n" +
+        "It does NOT delete your synced copies in the cloud: if you are signed in, your tasks, habits, notes, journal and other synced data will sync back down on the next load. Reminders are also kept.",
+      confirmLabel: 'Clear all data',
+    })) {
       // Nook keys use BOTH prefixes: 'nook-' (tasks, settings, calendar…) and
       // 'nook_' (notes, links, countdowns, journal, goals, Google tokens/sync).
       // Match both so "Clear all data" actually clears everything — leaving the
@@ -1112,14 +1117,20 @@ export default function App() {
   // tasksRef keeps this callback stable while still syncing the live list.
   const handleSyncNow    = useCallback(() => syncTasks(tasksRef.current, setTasks, setSyncStatus), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reminders tab → jump to the task that owns a reminder, opened straight to its Scheduling tab.
+  // Reminders tab → jump to the task that owns a reminder, opened straight to its Scheduling tab,
+  // or to the calendar event that owns it, opened in its detail modal. Manual ('custom')
+  // reminders have no owner; their push opens the app at '/' and lands nowhere special.
   const navigateToReminderSource = useCallback((sourceType, sourceId) => {
     if (sourceType === 'task') {
       setActiveTab('tasks');
       setPendingOpenTaskId(sourceId);
+    } else if (sourceType === 'calendar') {
+      setActiveTab('calendar');
+      setPendingOpenEventId(sourceId);
     }
   }, []);
   const clearPendingOpenTaskId = useCallback(() => setPendingOpenTaskId(null), []);
+  const clearPendingOpenEventId = useCallback(() => setPendingOpenEventId(null), []);
 
   // Deep link from a reminder push notification's notificationclick handler
   // (see public/sw.js), e.g. /?reminder=task:abc123 — opens once on load,
@@ -1531,22 +1542,22 @@ export default function App() {
             className="sidebar-brand-logo" 
             alt="Nook Logo" 
             onClick={() => {
-              if (!sidebarOpen) setSidebarOpen(true);
+              if (!sidebarOpen) { freezeLayoutAnimations(); setSidebarOpen(true); }
             }}
             style={{ cursor: !sidebarOpen ? 'pointer' : 'default' }}
             title={!sidebarOpen ? 'Expand sidebar' : ''}
           />
           <span className="sidebar-brand-name">Nook</span>
-          {sidebarOpen && (
-            <button
-              className="hdr-btn sidebar-close-btn"
-              onClick={() => setSidebarOpen(false)}
-              title="Collapse sidebar"
-              aria-label="Collapse sidebar"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-            </button>
-          )}
+          {/* Always mounted: on the rail CSS fades it out and takes it out of the tab order,
+              so collapsing doesn't pop it in/out of the layout. */}
+          <button
+            className="hdr-btn sidebar-close-btn"
+            onClick={() => { freezeLayoutAnimations(); setSidebarOpen(false); }}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
         </div>
 
         {/* Search — full widget when expanded, icon-only trigger when railed —
@@ -1676,7 +1687,7 @@ export default function App() {
         <AnimatePresence mode="wait">
         <motion.div
           key={activeTab}
-          className={`sunsama-tab-transition${activeTab === 'daily' ? ' yartu-tab-active' : ''}${activeTab === 'calendar' ? ' calendar-tab-active' : ''}${activeTab === 'activity' ? ' activity-tab-active' : ''}${activeTab === 'habits' ? ' habits-tab-active' : ''}${activeTab === 'journal' ? ' journal-tab-active' : ''}${activeTab === 'tasks' ? ' tasks-tab-active' : ''}${activeTab === 'notes' ? ' notes-tab-active' : ''}${activeTab === 'countdowns' ? ' countdowns-tab-active' : ''}${activeTab === 'links' ? ' links-tab-active' : ''}`}
+          className={`sunsama-tab-transition${activeTab === 'daily' ? ' yartu-tab-active' : ''}${activeTab === 'calendar' ? ' calendar-tab-active' : ''}${activeTab === 'activity' ? ' activity-tab-active' : ''}${activeTab === 'habits' ? ' habits-tab-active' : ''}${activeTab === 'journal' ? ' journal-tab-active' : ''}${activeTab === 'tasks' ? ' tasks-tab-active' : ''}${activeTab === 'notes' ? ' notes-tab-active' : ''}${activeTab === 'countdowns' ? ' countdowns-tab-active' : ''}${activeTab === 'links' ? ' links-tab-active' : ''}${activeTab === 'reports' ? ' reports-tab-active' : ''}`}
           // Opacity-only transition: animating y leaves an inline transform on this
           // wrapper even at rest, which makes it the containing block for any
           // position:sticky descendant (e.g. the Activity Log toolbar) and breaks
@@ -1760,6 +1771,8 @@ export default function App() {
               onUpdateTask={updateTaskData}
               trackers={trackers}
               habits={habits}
+              openEventId={pendingOpenEventId}
+              onEventOpened={clearPendingOpenEventId}
             />
           )}
 
@@ -1889,6 +1902,9 @@ export default function App() {
 
       {/* ── Toast ── */}
       {toast && <div key={toast.key} role="status" aria-live="polite" aria-atomic="true" className={`app-toast toast-${toast.type}`}>{toast.msg}</div>}
+
+      {/* ── Delete-confirmation popup (askConfirm) — one host for the whole app ── */}
+      <ConfirmHost />
 
       {/* ── Modals ── */}
       <AnimatePresence>

@@ -4,6 +4,7 @@ import TimeInput from './TimeInput';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logActivity } from '../utils/activityLog';
 import { useSyncApplied } from '../utils/useSyncApplied';
+import { safeHttpUrl, openSafeUrl } from '../utils/safeUrl';
 import {
   isGCalConnected,
   getCalendarToken, fetchGCalEvents, createGCalEvent, gcalColor,
@@ -12,6 +13,9 @@ import {
 import Select from './Select';
 import { localDateStr as toISO } from '../utils/date';
 import { genId } from '../utils/id';
+import { askConfirm } from '../utils/confirmDialog';
+import ReminderField from './ReminderField';
+import { clearReminder, renameReminder, TASK_DUE_TIME_ANCHOR } from '../utils/reminders';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -69,7 +73,7 @@ const CATEGORY_OPTIONS = [
   { value: 'mental', label: 'Mental' }, { value: 'finance', label: 'Finance' }, { value: 'growth', label: 'Growth' },
 ];
 
-export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
+export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask, openEventId, onEventOpened }) {
   const [currentDate,   setCurrentDate]   = useState(() => new Date());
   const [viewMode,      setViewMode]      = useState('day');
   const [showAddModal,  setShowAddModal]  = useState(false);
@@ -121,6 +125,18 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
     try { setCustomEvents(JSON.parse(localStorage.getItem('nook-calendar-events') || '[]')); } catch {}
   });
 
+  // Reminders tab → "open this event": jump to its day and open its detail modal.
+  // A Nook event no longer here (deleted on another device) just lands on the calendar.
+  useEffect(() => {
+    if (!openEventId) return;
+    const e = customEvents.find(x => x.id === openEventId);
+    if (e) {
+      if (e.date) setCurrentDate(new Date(e.date + 'T12:00:00'));
+      setDetailEvent({ id: e.id, title: e.title, date: e.date, time: e.time, endTime: e.endTime, isAllDay: e.isAllDay, type: 'event', category: e.category || 'growth', completed: e.completed });
+    }
+    onEventOpened?.();
+  }, [openEventId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const saveCustomEvent = ev => {
     const u = [...customEvents, ev];
     setCustomEvents(u);
@@ -158,7 +174,7 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
     const map = {};
     const add = (ds, item) => { if (!ds) return; (map[ds] = map[ds] || []).push(item); };
     tasks?.forEach(t => { if (t.dueDate) add(t.dueDate, { id: t.id, title: t.name || t.text, time: t.time, endTime: t.endTime, isAllDay: t.isAllDay, type: 'task', completed: t.completed, category: t.category || 'work', description: t.description }); });
-    customEvents?.forEach(e => { if (e.date) add(e.date, { id: e.id, title: e.title, time: e.time, endTime: e.endTime, isAllDay: e.isAllDay, type: 'event', category: e.category || 'growth' }); });
+    customEvents?.forEach(e => { if (e.date) add(e.date, { id: e.id, title: e.title, date: e.date, time: e.time, endTime: e.endTime, isAllDay: e.isAllDay, type: 'event', category: e.category || 'growth', completed: e.completed }); });
     gcalEvents.forEach(e => { if (e.date) add(e.date, { id: e.gcalId, title: e.title, time: e.time, endTime: e.endTime, type: 'gcal', colorId: e.colorId, description: e.description, location: e.location, htmlLink: e.htmlLink }); });
     return map;
   }, [tasks, customEvents, gcalEvents]);
@@ -271,7 +287,7 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
   const getEventStyle = ev => ev.type === 'gcal' ? (c => ({ bg: `${c}1a`, text: c, border: c }))(gcalColor(ev.colorId)) : getCategoryColor(ev.category);
 
   // gcal events open their source in Google Calendar; everything else opens the detail modal.
-  const openEvent = ev => { ev.htmlLink ? window.open(ev.htmlLink, '_blank') : setDetailEvent(ev); };
+  const openEvent = ev => { safeHttpUrl(ev.htmlLink) ? openSafeUrl(ev.htmlLink) : setDetailEvent(ev); };
 
   const renderChip = (ev, compact = false) => {
     const c = getEventStyle(ev);
@@ -807,18 +823,30 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
                     options={CATEGORY_OPTIONS}
                     style={INPUT_STYLE} />
                 </div>
+                {/* Nook events only — tasks set theirs in the task's Scheduling tab, and
+                    Google events open in Google Calendar, which has its own reminders.
+                    Saves on pick, like the task one; an all-day event anchors to end of day. */}
+                {detailEvent.type === 'event' && (
+                  <ReminderField
+                    sourceType="calendar"
+                    sourceId={detailEvent.id}
+                    title={detailEvent.title || 'Event'}
+                    targetAt={detailEvent.date ? new Date(`${detailEvent.date}T${detailEvent.time || TASK_DUE_TIME_ANCHOR}`) : null}
+                  />
+                )}
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '11px 14px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 11 }}>
                   <input type="checkbox" checked={!!detailEvent.completed} onChange={e => setDetailEvent({ ...detailEvent, completed: e.target.checked })} style={{ width: 17, height: 17, accentColor: 'var(--color-green)' }} />
                   <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)' }}>Mark as Completed</span>
                 </label>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button type="button" onClick={() => {
+                  <button type="button" onClick={async () => {
                     if (detailEvent.type === 'event') {
                       // Custom events have no "unscheduled" state and no other delete path,
                       // so removing them from the calendar means deleting the record.
-                      if (!confirm(`Delete "${detailEvent.title || 'this event'}"?`)) return;
+                      if (!(await askConfirm({ title: 'Delete this event?', message: `"${detailEvent.title || 'This event'}" will be deleted. This can't be undone.` }))) return;
                       const u = customEvents.filter(e => e.id !== detailEvent.id);
                       setCustomEvents(u); localStorage.setItem('nook-calendar-events', JSON.stringify(u));
+                      clearReminder('calendar', detailEvent.id).catch(() => {}); // don't leave it firing for a deleted event
                       logActivity({ module: 'calendar', entity_type: 'calendar_event', entity_id: detailEvent.id, action: 'deleted', title: detailEvent.title });
                     } else if (detailEvent.type === 'task') {
                       updateEventSchedule(detailEvent.id, 'task', null, null, null, false);
@@ -837,6 +865,11 @@ export default memo(function CalendarView({ tasks, onAddTask, onUpdateTask }) {
                         ? { ...e, title: detailEvent.title, time: detailEvent.time, endTime: detailEvent.endTime, isAllDay: detailEvent.isAllDay, category: detailEvent.category, completed: detailEvent.completed }
                         : e);
                       setCustomEvents(u); localStorage.setItem('nook-calendar-events', JSON.stringify(u));
+                      // Same rules as tasks: completing drops the reminder; a rename reaches the
+                      // row's title, which is what the push/email is built from.
+                      const prev = customEvents.find(e => e.id === detailEvent.id);
+                      if (detailEvent.completed && !prev?.completed) clearReminder('calendar', detailEvent.id).catch(() => {});
+                      else if (prev && detailEvent.title !== prev.title) renameReminder('calendar', detailEvent.id, detailEvent.title).catch(() => {});
                       logActivity({ module: 'calendar', entity_type: 'calendar_event', entity_id: detailEvent.id, action: 'updated', title: detailEvent.title });
                     }
                     // (gcal events are read-only in Nook — no local persistence path)

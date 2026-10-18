@@ -20,6 +20,8 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID')!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET')!;
 const KEEP = 7;
+// A backup is localStorage JSON (a few MB at most). Refuse anything wildly larger rather than relay it to Drive.
+const MAX_BODY_CHARS = 25_000_000;
 
 // Browser-invoked (supabase.functions.invoke), so CORS must be handled: the
 // preflight OPTIONS carries no auth header and is let through by the platform
@@ -81,7 +83,11 @@ Deno.serve(async (req) => {
 
   // 2. Validate the payload (same shape buildBackup() produces).
   let body: { backup?: { schemaVersion?: number; counts?: unknown } };
-  try { body = await req.json(); } catch { return json({ error: 'bad_json' }, 400); }
+  try {
+    const text = await req.text();
+    if (text.length > MAX_BODY_CHARS) return json({ error: 'payload_too_large' }, 413);
+    body = JSON.parse(text);
+  } catch { return json({ error: 'bad_json' }, 400); }
   const backup = body.backup;
   if (!backup || backup.schemaVersion !== 1) return json({ error: 'bad_payload' }, 400);
 

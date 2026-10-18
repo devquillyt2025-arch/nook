@@ -7,6 +7,7 @@ import { localDateStr } from '../utils/date';
 import { exportJournalDocx } from '../utils/journalDocx';
 import { useSyncApplied } from '../utils/useSyncApplied';
 import { ackSync } from '../utils/sync';
+import { sanitizeJournalHtml, htmlToPlainText } from '../utils/sanitizeHtml';
 
 // ─── Shared SVG props ───────────────────────────────────────────────
 const S = { fill:'none', stroke:'currentColor', strokeWidth:'2', strokeLinecap:'round', strokeLinejoin:'round' };
@@ -62,7 +63,8 @@ function isHtmlContent(str) {
 
 function toHtml(content) {
   if (!content) return '';
-  if (isHtmlContent(content)) return content;
+  // Stored HTML is untrusted (it can arrive via sync or a backup) — see utils/sanitizeHtml.js.
+  if (isHtmlContent(content)) return sanitizeJournalHtml(content);
   return content.split('\n').map(line =>
     line.trim()
       ? `<p>${line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`
@@ -70,11 +72,10 @@ function toHtml(content) {
   ).join('');
 }
 
+// Read through an inert parser: assigning stored HTML to a detached div's innerHTML still
+// loads <img> and fires its onerror, i.e. it runs script from the entry.
 function htmlToText(html) {
-  if (!html) return '';
-  const d = document.createElement('div');
-  d.innerHTML = html;
-  return d.textContent || d.innerText || '';
+  return htmlToPlainText(html);
 }
 
 function wordCountFromHtml(html) {
@@ -389,7 +390,7 @@ export default memo(function JournalView() {
     // Every day's entry is editable — save whichever date is being viewed.
     const existing = loadEntry(date) ?? emptyEntry(date);
     const isNew = !hasContentHtml(existing);
-    persistEntry(date, { ...existing, content: html });
+    persistEntry(date, { ...existing, content: sanitizeJournalHtml(html) });
     if (isNew && htmlToText(html).trim()) {
       logActivity({ module: 'journal', entity_type: 'journal_entry', entity_id: date, action: 'created', title: `Journal — ${date}` });
     } else if (!isNew) {
@@ -411,6 +412,18 @@ export default memo(function JournalView() {
       if (editorRef.current) saveCurrentEntry(editorRef.current.innerHTML);
     }, 1000);
   }, [saveCurrentEntry]);
+
+  // Pasted HTML comes from anywhere (a web page, another app). Don't let the browser drop it
+  // into the editor as-is: keep only what the journal supports, or fall back to plain text.
+  const handlePaste = useCallback((e) => {
+    const data = e.clipboardData;
+    if (!data) return;
+    e.preventDefault();
+    const clean = sanitizeJournalHtml(data.getData('text/html'));
+    if (htmlToPlainText(clean).trim()) document.execCommand('insertHTML', false, clean);
+    else document.execCommand('insertText', false, data.getData('text/plain'));
+    handleEditorInput();
+  }, [handleEditorInput]);
 
   const handleEditorBlur = useCallback(() => {
     if (!editorRef.current) return;
@@ -636,6 +649,7 @@ export default memo(function JournalView() {
               contentEditable
               suppressContentEditableWarning
               onInput={handleEditorInput}
+              onPaste={handlePaste}
               onBlur={handleEditorBlur}
               data-placeholder={isToday
                 ? (streak > 0 ? `Keep your ${streak}-day streak alive — begin where you are…` : 'Begin where you are. Write your thoughts, reflections, or notes for today…')
@@ -664,12 +678,10 @@ export default memo(function JournalView() {
                 <button className="jnx-icon-action" onClick={() => setPaletteOpen(true)} title="Search entries (Ctrl+K)" aria-label="Search entries">
                   <JIcoSearch />
                 </button>
-                {/* Today + Export + Autosave grouped in one non-wrapping unit: if the row
-                    is too narrow for everything, this whole group drops to its own line
-                    together (still Today-Export-Autosave side by side) instead of Autosave
-                    splitting off alone — the exact "disconnected" problem this is fixing.
-                    Only this outer placement changed — the export dropdown's own
-                    contents/logic below are untouched. */}
+                {/* Search · Today · Export · Autosave always share ONE row (no wrapping). The panel
+                    is only ~190–290px wide, so when it can't fit them the CSS collapses Export and
+                    then Autosave to icon-only (container queries on .jnx-right-controls) — the
+                    .jnx-export-txt / .jnx-status-txt spans exist for that. */}
                 <div className="jnx-right-today-group">
                 <button
                   className={`jnx-today-btn${isToday ? ' jnx-today-btn-current' : ''}`}
@@ -688,7 +700,7 @@ export default memo(function JournalView() {
                 title="Export journal as .docx"
               >
                 {exporting ? <span className="jnx-export-spin" aria-hidden="true" /> : <JIcoDoc />}
-                Export
+                <span className="jnx-export-txt">Export</span>
                 <JIcoChevronDown />
               </button>
 
@@ -757,10 +769,10 @@ export default memo(function JournalView() {
                   {exportMsg && <div className="jnx-export-msg" role="status" aria-live="polite">{exportMsg}</div>}
                 </div>, document.body)}
             </div>
-                <span className={`jnx-status jnx-status-${saveStatus}`}>
-                  {saveStatus === 'saving' && <><span className="jnx-status-dot" /> Saving…</>}
-                  {saveStatus === 'saved' && <><JIcoCheck /> Saved</>}
-                  {saveStatus === 'idle' && <span className="jnx-status-idle">Autosave</span>}
+                <span className={`jnx-status jnx-status-${saveStatus}`} title={saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : 'Autosave is on'}>
+                  {saveStatus === 'saving' && <><span className="jnx-status-dot" /><span className="jnx-status-txt">Saving…</span></>}
+                  {saveStatus === 'saved' && <><JIcoCheck /><span className="jnx-status-txt">Saved</span></>}
+                  {saveStatus === 'idle' && <><span className="jnx-status-dot jnx-status-dot-idle" /><span className="jnx-status-txt jnx-status-idle">Autosave</span></>}
                 </span>
                 </div>
               </div>

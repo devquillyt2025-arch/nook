@@ -42,6 +42,27 @@ const json = (body: unknown, status = 200) =>
 const CATEGORIES = ['learning', 'fitness', 'mental', 'work', 'growth'];
 const PRIORITIES = ['high', 'medium', 'low', 'none'];
 
+// Best-effort per-user rate limit. State lives in this isolate's memory, so it bounds a single client
+// hammering the endpoint (each call is paid Anthropic usage) but is NOT a hard global cap: separate
+// isolates keep separate counters. A DB-backed counter is the follow-up if these features are enabled.
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 30;
+const recentCalls = new Map<string, number[]>();
+function rateLimited(userId: string): boolean {
+  const now = Date.now();
+  const recent = (recentCalls.get(userId) ?? []).filter(t => now - t < RATE_WINDOW_MS);
+  const limited = recent.length >= RATE_MAX;
+  if (!limited) recent.push(now);
+  recentCalls.set(userId, recent);
+  if (recentCalls.size > 5000) {
+    for (const [k, v] of recentCalls) if (!v.some(t => now - t < RATE_WINDOW_MS)) recentCalls.delete(k);
+  }
+  return limited;
+}
+
+// Reject oversized bodies before parsing them.
+const MAX_BODY_CHARS = 64_000;
+
 // strict:true requires every property to be listed in `required` — so the
 // model always fills a value (using '' for "nothing said") rather than
 // omitting a field, which keeps `params` a complete, directly-usable object
@@ -125,13 +146,18 @@ Deno.serve(async (req) => {
   });
   const { data: { user } } = await userClient.auth.getUser();
   if (!user) return json({ error: 'unauthenticated' }, 401);
+  if (rateLimited(user.id)) return json({ error: 'Too many requests — try again in a minute.' }, 429);
 
   // 2. Read the transcript + the client's local "today" (must be computed
   //    client-side in the user's own timezone — see voiceCommandClient.js —
   //    so "tomorrow" near midnight resolves the way the user meant it, not
   //    however this server happens to see UTC).
   let payload: { transcript?: string; currentDate?: string };
-  try { payload = await req.json(); } catch { return json({ error: 'bad_json' }, 400); }
+  try {
+    const text = await req.text();
+    if (text.length > MAX_BODY_CHARS) return json({ error: 'payload_too_large' }, 413);
+    payload = JSON.parse(text);
+  } catch { return json({ error: 'bad_json' }, 400); }
   const transcript = (payload.transcript || '').trim().slice(0, 500);
   const currentDate = /^\d{4}-\d{2}-\d{2}$/.test(payload.currentDate || '')
     ? payload.currentDate!
@@ -151,7 +177,8 @@ Deno.serve(async (req) => {
       messages: [{ role: 'user', content: transcript }],
     });
   } catch (err) {
-    return json({ error: `llm_request_failed: ${err instanceof Error ? err.message : String(err)}` }, 502);
+    console.error('[parse-voice-command] llm request failed:', err);
+    return json({ error: 'llm_request_failed' }, 502);
   }
 
   // 4. Extract whichever tool_use block (if any) Claude produced.

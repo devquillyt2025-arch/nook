@@ -6,6 +6,7 @@ import { NOTES_STORAGE_KEY, loadNotes, newNote, addedAt, saveNote as storeSaveNo
 import Select from './Select';
 import ErrorBoundary from './ErrorBoundary';
 import { sameDay, startOfDay, endOfDay } from '../utils/date';
+import { askConfirm } from '../utils/confirmDialog';
 
 const STORAGE_KEY = NOTES_STORAGE_KEY;
 
@@ -294,7 +295,7 @@ export function NoteModal({ note, onSave, onClose, onDelete, onColorChange }) {
               )}
             </div>
             {!isNew && (
-              <button onClick={() => { if (confirm('Delete this note?')) { onDelete(note.id); onClose(); } }} title="Delete note"
+              <button onClick={async () => { if (await askConfirm({ title: 'Delete this note?', message: `"${note.title || 'Untitled note'}" will be deleted. This can't be undone.` })) { onDelete(note.id); onClose(); } }} title="Delete note"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-red)', padding: '6px', display: 'flex', alignItems: 'center', opacity: 1, transition: 'opacity 0.15s ease' }}
                 onMouseEnter={e => e.currentTarget.style.opacity = 0.8}
                 onMouseLeave={e => e.currentTarget.style.opacity = 1}>
@@ -439,7 +440,7 @@ export function NoteCard({ note, onOpen, onPin, onDelete, onTagClick, onColorSel
                       transition: 'transform 0.15s ease',
                     }} />
                   </button>
-                  <button onClick={e => { e.stopPropagation(); if (confirm('Delete this note?')) onDelete(note.id); }}
+                  <button onClick={async e => { e.stopPropagation(); if (await askConfirm({ title: 'Delete this note?', message: `"${note.title || 'Untitled note'}" will be deleted. This can't be undone.` })) onDelete(note.id); }}
                     aria-label="Delete note"
                     title="Delete"
                     style={{ background: 'rgba(239,68,68,0.08)', border: 'none', cursor: 'pointer', color: 'var(--color-red)', width: 28, height: 28, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -662,6 +663,8 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
             New Note
           </button>
 
+          {/* Filters — display:contents on desktop (same flat row); a scrolling chip row on phones, see .nv-filters */}
+          <div className="nv-filters">
           {/* 3. Color palette — compact 22 px swatches */}
           <div role="group" aria-label="Filter by color" style={{ display: 'flex', gap: 3, alignItems: 'center', background: 'var(--bg-input)', padding: '0 8px', height: 34, borderRadius: 9999, border: '1px solid var(--border)', flexShrink: 0, boxSizing: 'border-box' }}>
             <button
@@ -753,6 +756,7 @@ export default memo(function NotesView({ onOpenNoteEditor, globalSearchQuery = '
               ? `${filtered.length} of ${notes.length} entries`
               : `${notes.length} entries`}
           </span>
+          </div>
 
         </div>
 

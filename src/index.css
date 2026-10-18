@@ -144,7 +144,10 @@ input, textarea, select { font-family: inherit; }
 /* ─── App shell ─────────────────────────────────────────────────── */
 :root { --sidebar-width: 240px; --sidebar-rail-width: 60px; }
 .app { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
-.app-body { display: flex; flex: 1; min-height: 0; overflow: hidden; transition: margin-left 0.25s ease; }
+.app-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+/* No margin-left transition: the sidebar (position:fixed, above the page) animates its own width, but the
+   page must change size ONCE. Animating this margin re-laid-out every tab on every frame for 250ms — the
+   Journal's calendar/export card, the task rows, the charts all visibly shrank and grew with the sidebar. */
 .sidebar-open .app-body { margin-left: var(--sidebar-width); }
 .sidebar-rail .app-body { margin-left: var(--sidebar-rail-width); }
 
@@ -258,7 +261,7 @@ input, textarea, select { font-family: inherit; }
   z-index: 20;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
-  padding: 16px 14px 14px;
+  padding: 16px 6px 14px;   /* same in the rail: the icon column (centre x=30) never moves */
   overflow: hidden;   /* the sidebar itself doesn't scroll — .nav-scroll does, so the head stays pinned */
   box-sizing: border-box;
   box-shadow: 2px 0 8px rgba(0,0,0,0.04);
@@ -268,7 +271,7 @@ input, textarea, select { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 2px 2px 0;
+  padding: 2px 2px 0 12px;   /* 6 (nav) + 12 + 12 (half the logo) = centre x 30, same as the nav icons */
   margin-bottom: 18px;
   flex-shrink: 0;
   min-width: 0;
@@ -342,54 +345,69 @@ input, textarea, select { font-family: inherit; }
   overflow-y: auto; overflow-x: hidden;
   scrollbar-width: none;
   /* Reach into .main-nav's own padding, or the active item's glow is clipped at the edges. */
-  margin: 0 -14px; padding: 0 14px 4px;
+  margin: 0 -6px; padding: 0 6px 4px;
 }
 .nav-scroll::-webkit-scrollbar { width: 0; }
-.main-nav--rail .nav-scroll { margin: 0 -6px; padding: 0 6px 4px; }
 
-/* ─── Icon-rail collapse ─────────────────────────────────────────── */
-/* Smooth width transition on the sidebar itself */
+/* ─── Icon-rail collapse ─────────────────────────────────────────────
+   The rail is the SAME layout as the full sidebar, only narrower: identical padding, icon column
+   (centre x=30), row heights and vertical positions. Toggling changes the panel's width and fades
+   the text — no icon, logo or row moves. (It used to hide the text with display:none and re-centre
+   the icons, so they jumped to the middle of the still-wide panel and swooped across as it shrank.) */
 .main-nav {
   transition: width 0.25s ease, min-width 0.25s ease;
 }
-
-/* Rail state — shrink to 60px icon strip */
 .main-nav--rail {
   width: var(--sidebar-rail-width) !important;
   min-width: var(--sidebar-rail-width) !important;
-  padding: 16px 6px 14px;
 }
 
-/* In rail mode: hide everything that isn't an icon */
+/* Only the text goes away: it fades (display:none can't animate) and is clipped by the narrowing
+   panel. Fading out is quick; fading in waits a beat for the panel to widen. */
+.main-nav .nav-label,
+.main-nav .nav-section-label,
+.main-nav .sidebar-brand-name,
+.main-nav .sb-search-full-placeholder,
+.main-nav .search-shortcut-badge {
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity 0.18s ease 0.08s;
+}
+.main-nav .sidebar-brand-name,
+.main-nav .sb-search-full-placeholder { flex-shrink: 1; }
+.main-nav .sidebar-brand-name { text-overflow: clip; }  /* no "N…" flicker while it narrows */
 .main-nav--rail .nav-label,
 .main-nav--rail .nav-section-label,
-.main-nav--rail .nav-settings-separator,
-.main-nav--rail .nav-divider,
 .main-nav--rail .sidebar-brand-name,
-.main-nav--rail .sidebar-close-btn,
-.main-nav--rail .nav-badge { /* expanded-mode absolute badge */
+.main-nav--rail .sb-search-full-placeholder,
+.main-nav--rail .search-shortcut-badge {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+/* The collapse toggle stays mounted (so it doesn't pop in and out) and is hidden on the rail. */
+.main-nav--rail .sidebar-close-btn {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.1s ease, visibility 0s 0.1s;
+}
+.main-nav--rail .nav-badge { /* expanded-mode absolute badge; the rail shows .nav-badge-rail instead */
   display: none !important;
 }
 
-/* Rail buttons: centered, narrower */
-.main-nav--rail .main-nav-btn {
-  justify-content: center;
-  padding: 10px 0;
-  width: 100%;
-  /* Active bar: left border still works */
+/* Nav rows: icon-only content is exactly the rail's 48px button (1 + 14 + 18 + 14 + 1), so the same
+   padding works in both states and the icon sits at x=30 whether or not the label is showing. */
+.main-nav .main-nav-btn {
+  padding: 8px 14px;
+  gap: 12px;
 }
+.main-nav .nav-section-label { padding-left: 15px; }  /* lines up with the icons' left edge */
 
-/* Rail brand: just the logo + toggle */
-.main-nav--rail .sidebar-brand {
-  justify-content: center;
-  gap: 0;
-  margin-bottom: 10px;
-}
-
-/* Show toggle button in rail mode (it was hidden by sidebar-close-btn rule) */
-.main-nav--rail .sidebar-close-btn {
-  display: flex !important;
-  margin-left: 0;
+/* Search pill: shrinks to its icon (centre x=30) with the panel; the text fades and is clipped. */
+.main-nav .sb-search-full {
+  padding: 0 15px;
+  overflow: hidden;
 }
 
 /* Icon wrapper — relative so the corner badge can position over it */
@@ -425,79 +443,6 @@ input, textarea, select { font-family: inherit; }
 
 /* Show corner badge only when rail is active */
 .main-nav--rail .nav-badge-rail { display: flex; }
-
-/* Hide the expanded-mode absolute badge in rail mode (already done above) */
-
-/* ─── Tooltip (CSS-only, data-tooltip attr) ──────────────────────── */
-/* Tooltip appears to the right of each button with a short delay */
-.main-nav--rail .main-nav-btn {
-  position: relative;
-  overflow: visible;
-}
-.main-nav--rail .main-nav-btn::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%) translateX(-6px);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: 0.76rem;
-  font-weight: 500;
-  white-space: nowrap;
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-sm);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  z-index: 200;
-  letter-spacing: -0.01em;
-}
-/* Arrow pointing left */
-.main-nav--rail .main-nav-btn::before {
-  content: '';
-  position: absolute;
-  left: calc(100% + 2px);
-  top: 50%;
-  transform: translateY(-50%);
-  border: 5px solid transparent;
-  border-right-color: var(--border-strong);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  z-index: 200;
-}
-
-/* Reveal on hover with ~300ms delay */
-.main-nav--rail .main-nav-btn:hover::after,
-.main-nav--rail .main-nav-btn:hover::before {
-  opacity: 1;
-  transition-delay: 0.3s;
-}
-.main-nav--rail .main-nav-btn:hover::after {
-  transform: translateY(-50%) translateX(0);
-}
-
-/* Search widget in rail: hide the full button, show only icon trigger */
-.main-nav--rail .sb-search-full-wrap { width: 100%; }
-.main-nav--rail .sb-search-full {
-  width: 100%;
-  justify-content: center;
-  padding: 10px 0;
-  gap: 0;
-}
-.main-nav--rail .sb-search-full-placeholder,
-.main-nav--rail .search-shortcut-badge { display: none; }
-.main-nav--rail .sb-search-full { margin-bottom: 4px; }
-
-/* Rail trigger (already icon-only) needs centering */
-.main-nav--rail .sb-search-rail { width: 100%; display: flex; justify-content: center; }
-
-/* Suppress search tooltip from the ::after trick for search buttons */
-.main-nav--rail .sb-search-full-wrap::after,
-.main-nav--rail .sb-search-full::after { display: none; }
 
 /* Section label */
 .nav-section-label {
@@ -2424,7 +2369,9 @@ kbd {
    ═══════════════════════════════════════════════════════════════════ */
 .reports-view {
   width: 100%; margin: 0 auto;
-  padding: 22px 30px 48px;
+  /* No top padding: the sticky .ra-bar is the first thing in it and supplies its own, so it starts flush
+     at the scroll-container top instead of sliding up before it pins. */
+  padding: 0 30px 48px;
   display: flex; flex-direction: column; gap: 14px;
 }
 
@@ -2676,6 +2623,18 @@ kbd {
 
 /* ── Reports: Overview / Detailed Analysis switch + the Detailed Analysis view ── */
 .ra-view-switch { display: flex; }
+/* Pinned bar — view switch, title, range buttons and the date caption stay put with a line under them
+   while the report scrolls beneath (same pattern as .al-toolbar / .cdp-head). It is the first child of
+   each view's root so sticky has the whole page to travel through; ReportsView hands the switch down. */
+.ra-bar {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; flex-direction: column; gap: 12px;
+  background: var(--bg-base);
+  padding: 24px 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ra-bar .ra-period-head { margin-bottom: 0; }
+.ra-bar .ra-range-caption { margin: 0; }
 .da { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 28px; }
 .da .ra-card { min-width: 0; }
 .da-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -3404,6 +3363,11 @@ select.modal-input {
    .jnx-write-panel is now first in DOM); the ≥768 / ≥1024 breakpoints below
    promote it to a side-by-side grid, canvas in column 1, metadata in column 2. */
 .jnx-split {
+  /* Width of the right-hand card (stats, calendar, Search/Today/Export). It is derived from the WINDOW
+     (vw), never from the space left beside the sidebar, so toggling the sidebar can't resize it: only the
+     editor beside it gives up / takes the 180px. (It used to be a 3fr share of the remaining space, so the
+     card — calendar, buttons and all — shrank and grew every time the sidebar moved.) */
+  --jnx-panel-w: clamp(200px, 24vw, 340px);
   display: grid;
   grid-template-columns: 1fr;
   gap: 28px;
@@ -4558,18 +4522,16 @@ select.modal-input {
    than scrolling away as the user browses meta's content alongside it. */
 @media (min-width: 1024px) {
   .jnx-split {
-    /* minmax(0, Nfr), not bare Nfr — a bare fr track's minimum size defaults to
-       auto (its content's min-content width), so if anything inside .jnx-meta
-       (the KPI stat grid, the month calendar) has a wider natural minimum than
-       30% of the available space, the browser expands the track past its fr
-       share to fit it — meta renders wider than 30% regardless of the ratio
-       written here. minmax(0, Nfr) explicitly allows the track to shrink below
-       its content's minimum, so the fr ratio actually holds. Canvas is column 1
-       (7fr) and meta is column 2 (3fr) — matching .jnx-write-panel/.jnx-meta's
-       DOM order, since grid auto-placement fills columns in source order when
-       no explicit grid-column is set on either child. */
-    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    /* The canvas takes whatever is left (minmax(0, 1fr): the 0 minimum lets it shrink below its
+       content's min-content width instead of pushing the layout wider); the metadata card is a fixed
+       --jnx-panel-w column (see .jnx-split), so it is the same size with the sidebar open or collapsed.
+       Canvas is column 1 and meta column 2 — matching .jnx-write-panel/.jnx-meta's DOM order, since
+       grid auto-placement fills columns in source order when no explicit grid-column is set. */
+    grid-template-columns: minmax(0, 1fr) var(--jnx-panel-w);
     column-gap: 48px;
+    /* No grid-template-columns transition here: the track is window-sized now, so it would make the card
+       lag behind a window resize. (That transition only served the unused right-collapse block above.) */
+    transition: gap 0.25s ease, column-gap 0.25s ease;
     /* Explicit row height, independent of either column's own content or cap.
        Grid's default "auto" row sizing takes the tallest column's (capped)
        contribution as the row height — so whichever column is taller ends up
@@ -4624,10 +4586,10 @@ select.modal-input {
 /* Tablet — flexible canvas on the left, right-sized metadata column on the right */
 @media (min-width: 768px) and (max-width: 1023px) {
   .jnx-split {
-    /* minmax(0, Nfr) — same reasoning as the desktop breakpoint above. Canvas
-       is column 1 (3fr), meta is column 2 (2fr), matching DOM order. */
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    /* Same as the desktop breakpoint above: flexible canvas, fixed --jnx-panel-w metadata column. */
+    grid-template-columns: minmax(0, 1fr) var(--jnx-panel-w);
     column-gap: 32px;
+    transition: gap 0.25s ease, column-gap 0.25s ease;
     /* See the desktop breakpoint's comment above — explicit row height, +32px
        of real sticky slack (matching this breakpoint's own column-gap value),
        with the same 160px of surrounding tab-shell padding subtracted back out. */
@@ -4807,17 +4769,23 @@ select.modal-input {
 }
 .cdp-head .cdp-filterbar { padding: 0; }   /* the head owns the spacing; flush with the stat cards so the filters fit one row */
 .cdp-filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cdp-filter-label { font-size: 0.66rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
-.cdp-count-label { font-size: 0.76rem; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
+/* One type scale for the whole strip: every piece of text is 0.8rem (the labels used to be 0.66rem
+   uppercase, the priority options 0.72rem, the count 0.76rem, and the dropdown list 0.95rem), and the
+   three controls are 32px tall (they were 32 / 26 / 29). Hierarchy comes from colour + weight, not size:
+   labels and the count are muted / 500, the values and the actions are 600. */
+.cdp-filter-label { font-size: 0.8rem; font-weight: 500; color: var(--text-muted); white-space: nowrap; }
+.cdp-count-label { font-size: 0.8rem; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
 
-.cdp-segment { display: flex; align-items: center; gap: 2px; background: var(--bg-hover); border-radius: 999px; padding: 2px; }
+.cdp-segment { display: flex; align-items: center; gap: 2px; background: var(--bg-hover); border-radius: 999px; padding: 3px; height: 32px; box-sizing: border-box; }
 .cdp-segment-btn {
-  font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);
+  font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);
   background: transparent; border: none; border-radius: 999px;
-  padding: 4px 11px; cursor: pointer; font-family: inherit; transition: all var(--ease);
+  height: 100%; padding: 0 12px; display: inline-flex; align-items: center;
+  cursor: pointer; font-family: inherit; transition: all var(--ease);
 }
 .cdp-segment-btn:hover { color: var(--text-primary); }
-.cdp-segment-btn-active { font-weight: 700; }
+.cdp-segment-btn-active { font-weight: 600; }   /* same weight as inactive: a bolder label made the pill reflow when toggled */
+.cdp-filterbar .add-task-btn { height: 32px; padding: 0 14px; display: inline-flex; align-items: center; }
 
 /* ── Card grid — 2-3 per row responsive ── */
 .cdp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; align-items: start; }
@@ -5592,7 +5560,7 @@ select.modal-input {
   .tab-bar { padding: 8px 15px 0; }
   .tab-btn { padding: 7px 13px; font-size: 0.81rem; }
   .daily-view   { padding: 15px 15px 80px; }
-  .reports-view { padding: 15px 15px 80px; }
+  .reports-view { padding: 0 15px 80px; }   /* top 0: the pinned .ra-bar supplies its own */
   .timer-tab    { grid-template-columns: 1fr; padding: 18px 15px 32px; }
   .timer-left-col { position: static; }
   .timer-right-col .stats-panel { max-width: 100%; }
@@ -5638,7 +5606,7 @@ select.modal-input {
   .nav-label { display: none; }
   .tracker-type-grid { grid-template-columns: 1fr; }
   .daily-view   { padding: 11px 11px 80px; gap: 10px; }
-  .reports-view { padding: 11px 11px 80px; }
+  .reports-view { padding: 0 11px 80px; }
   .reports-global-stats { grid-template-columns: repeat(2, 1fr); }
   .rgs-val { font-size: 1.05rem; }
   .detail-stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -6078,7 +6046,8 @@ select.modal-input {
   border-right: 1px solid var(--border);
   width: 240px;
   min-width: 240px;
-  padding: 24px 16px;
+  /* No padding here: this selector out-ranks .main-nav / .main-nav--rail, so a padding on it made the
+     light rail's icons sit ~10px off-centre and differ from the dark one. Geometry is shared. */
 }
 :root[data-theme="light"] .main-nav-btn {
   padding: 8px 14px;
@@ -6184,12 +6153,13 @@ select.modal-input {
 /* Activity Log's toolbar is position:sticky. Drop the tab shell's top padding so
    the toolbar starts flush at the scroll-container top — otherwise it travels the
    32px of padding upward before pinning, which reads as "moving on first scroll".
-   Notes (.nv-bar), Links (.lk-bar), Countdowns (.cdp-head) and Today (.today-head, whose shell class
-   is yartu-tab-active) pin their headers the same way. */
+   Notes (.nv-bar), Links (.lk-bar), Countdowns (.cdp-head), Reports (.ra-bar) and Today (.today-head, whose
+   shell class is yartu-tab-active) pin their headers the same way. */
 .sunsama-tab-transition.activity-tab-active,
 .sunsama-tab-transition.notes-tab-active,
 .sunsama-tab-transition.links-tab-active,
 .sunsama-tab-transition.countdowns-tab-active,
+.sunsama-tab-transition.reports-tab-active,
 .sunsama-tab-transition.yartu-tab-active {
   padding-top: 0;
 }
@@ -6859,9 +6829,6 @@ select.modal-input {
   box-shadow: 0 0 0 3px var(--accent-glow);
   outline: none;
 }
-
-/* Sidebar search — 64px rail: icon-only trigger, same overlay as the full pill */
-.sb-search-rail { position: relative; margin-bottom: 6px; }
 
 .search-results-list { display: flex; flex-direction: column; max-height: 340px; overflow-y: auto; }
 
@@ -7960,6 +7927,41 @@ select.modal-input {
 .al-confirm-del.ready { background: #ef4444; color: #fff; opacity: 1; cursor: pointer; }
 .al-confirm-del.ready:hover { background: #dc2626; }
 
+/* Shared delete-confirmation popup (ConfirmDialog.jsx / askConfirm). z-index sits above
+   .modal-overlay (100) and FloatingPopover (10050) so it shows over any modal or side panel. */
+.nk-confirm-overlay {
+  position: fixed; inset: 0; z-index: 10060; padding: 20px;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeOverlay 0.13s ease;
+}
+.nk-confirm {
+  background: var(--bg-surface); border: 1px solid var(--border-strong);
+  border-radius: 14px; padding: 24px 26px;
+  max-width: 390px; width: 100%;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column;
+  animation: modalIn 0.18s var(--ease-spring);
+}
+.nk-confirm-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%; margin-bottom: 12px;
+  background: rgba(239,68,68,0.1); color: #ef4444;
+}
+.nk-confirm-title { margin: 0 0 6px; font-size: 1rem; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.nk-confirm-body  { margin: 0 0 18px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; overflow-wrap: anywhere; white-space: pre-line; }
+.nk-confirm-title + .nk-confirm-actions { margin-top: 12px; }   /* no message: title sits directly above the buttons */
+.nk-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.nk-confirm-cancel, .nk-confirm-del {
+  border-radius: 7px; padding: 7px 16px; font-size: 0.85rem; cursor: pointer; font-family: inherit;
+  transition: background 0.13s, border-color 0.13s;
+}
+.nk-confirm-cancel { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); }
+.nk-confirm-cancel:hover { background: var(--bg-hover); }
+.nk-confirm-del { background: #ef4444; border: 1px solid #ef4444; color: #fff; font-weight: 600; }
+.nk-confirm-del:hover { background: #dc2626; border-color: #dc2626; }
+.nk-confirm-cancel:focus-visible, .nk-confirm-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* Undo toast */
 .al-undo-toast {
   position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
@@ -8490,69 +8492,98 @@ select.modal-input {
 @keyframes jnxFlameFlicker { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.9); } }
 
 
-/* ── Right Column Controls — one row ────────────────────────────────────
-   Export + Autosave moved to sit beside Today, inside .jnx-right-actions,
-   instead of their own right-aligned row below (.jnx-right-end, now removed).
-   An earlier attempt at merging these into one row broke because the old
-   narrow sidebar-style panel (~339px) couldn't fit nav+search+Today+
-   Export+Autosave on one line — that was before the panel moved to the left
-   column and widened to a 3fr/2fr share of the page. flex-wrap stays on as a
-   safety net regardless of how much room the panel actually has. */
+/* ── Right Column Controls — Search · Today · Export · Autosave on ONE row ──
+   The panel is only ~190–290px wide (it is a 3fr/7fr share of the page, and the
+   sidebar rail/full toggle moves it by another ~180px), so the four controls can't
+   always keep their full size. The row never wraps. Instead .jnx-right-controls is a
+   size container and, as it narrows, Autosave and then Export fall back to an icon
+   (the text stays in the DOM, visually hidden, plus a title). Search and Today never
+   change. Container queries, not viewport media queries, because the panel's width
+   isn't a function of the window alone. */
 .jnx-right-controls {
   display: flex;
   padding: 6px 0;
+  container-type: inline-size;
 }
-/* Full width — see .jnx-meta-cal-head's comment above; justify-content: flex-end
-   still hugs the (content-sized) actions cluster to the panel's right edge,
-   which now matches the calendar's own right edge since both span 100%. */
 .jnx-right-cluster {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
   width: 100%;
+  min-width: 0;
 }
 .jnx-right-actions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
-/* Today + Export + Autosave move as one unit if the row can't fit everything —
-   flex-wrap:nowrap here means this trio either stays fully on the same line as
-   the icons, or drops to its own line together, but never splits mid-group
-   (which is what plain wrap on .jnx-right-actions alone would do). */
+.jnx-right-actions .jnx-icon-action { width: 30px; height: 30px; }
+/* Today · Export · Autosave: Autosave is pushed to the panel's right edge. */
 .jnx-right-today-group {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
+.jnx-right-today-group .jnx-today-btn { padding: 7px 10px; flex-shrink: 0; }
 .jnx-right-actions .jnx-export-dropdown {
   position: relative;
 }
 .jnx-right-actions .jnx-export-trigger {
   width: auto;
   justify-content: flex-start;
+  padding: 6px 9px;
 }
-/* Autosave as a status pill, matching the icon row's line-height instead of
-   floating as bare text. Uses confirmed-real tokens (--bg-hover, --jnx-line) —
-   not --surface-2/--border-soft, which the nearby .jnx-kpi-card used to
-   reference but which are never defined anywhere in this file. */
+/* Autosave as a status pill. Fixed width so swapping "Autosave" ⇄ "Saving…" ⇄ "Saved"
+   while typing never resizes it; margin-left:auto keeps it on the right edge. Uses
+   tokens that exist (--bg-hover, --jnx-line). */
 .jnx-right-controls .jnx-status {
-  padding: 4px 10px;
+  position: relative;
+  margin-left: auto;
+  padding: 4px 8px;
   border-radius: 999px;
   background: var(--bg-hover);
   border: 1px solid var(--jnx-line);
-  /* Pin the width so swapping "Autosave" ⇄ "Saving…" ⇄ "Saved" while typing can't
-     reflow the flex row and jitter the Today/Export buttons beside it. Fixed (not
-     just min-) width sized above the widest state ("Saving…" + pulsing dot + gap),
-     so the box never grows or shrinks and content just re-centres in place. */
-  width: 100px;
+  font-size: 0.74rem;
+  gap: 5px;
+  width: 78px;
   flex: 0 0 auto;
   justify-content: center;
   box-sizing: border-box;
+}
+.jnx-status-dot-idle { display: none; animation: none; opacity: 0.45; }
+
+/* Step 1 — too narrow for the Autosave text: it becomes a status dot / check. */
+@container (max-width: 283px) {
+  .jnx-right-controls .jnx-status { width: 30px; height: 29px; padding: 0; }
+  .jnx-right-controls .jnx-status-dot-idle { display: inline-block; }
+  .jnx-right-controls .jnx-status-txt {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+}
+/* Step 2 — still too narrow: Export becomes just its icon. */
+@container (max-width: 232px) {
+  .jnx-right-actions .jnx-export-trigger { padding: 6px 8px; }
+  .jnx-right-actions .jnx-export-trigger > svg:last-child { display: none; }
+  .jnx-right-actions .jnx-export-txt {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+}
+/* Step 3 — a tablet-width window with the full sidebar open leaves ~145px: tighten the spacing
+   (the row can then overrun into the panel's own 18px padding at most, never out of the card). */
+@container (max-width: 175px) {
+  .jnx-right-cluster, .jnx-right-actions, .jnx-right-today-group { gap: 4px; }
+  .jnx-right-actions .jnx-icon-action { width: 28px; }
+  .jnx-right-today-group .jnx-today-btn { padding: 7px 8px; }
+  .jnx-right-controls .jnx-status { width: 28px; }
 }
 
 /* ── Write Panel: pure canvas, no chrome ───────────────────────────── */
@@ -8686,7 +8717,6 @@ select.modal-input {
    width:100%/flex-shrink:0 (sized for sitting alone in the sidebar) or it
    claims the whole row and pushes the mic button out of the visible area. */
 .sb-search-row .sb-search-full { width: auto; flex: 1; min-width: 0; flex-shrink: 1; }
-.main-nav--rail .sb-search-row { flex-direction: column; gap: 6px; }
 
 .voice-mic-btn { flex-shrink: 0; position: relative; }
 .voice-mic-btn:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -8775,3 +8805,273 @@ select.modal-input {
 .chat-view-input-row { display: flex; align-items: center; gap: 8px; }
 .chat-view-input-row .form-inp { flex: 1; min-width: 0; }
 .chat-view-input-row .voice-mic-btn { flex-shrink: 0; }
+
+/* ═══ MOBILE APP LAYER (≤768px) ═══════════════════════════════════════════
+   One block that turns the desktop layouts into a phone app. It sits at the end
+   of the file on purpose: it overrides the per-view rules above rather than
+   editing each of them, and everything is inside the one 768px query so desktop
+   is untouched. The bottom nav (.mobile-bottom-nav) replaces the sidebar here.
+   Gutter rule: the tab shell (.sunsama-tab-transition) owns the 16px side
+   padding; a view must NOT add its own, or content ends up 40–60px in. Pinned
+   headers go full-bleed with margin-inline:-16px + padding-inline:16px. */
+/* Wrappers added so a toolbar's filters can scroll as one row on phones. On desktop they
+   must not exist as boxes: display:contents keeps the original flat flex/grid row. */
+.nv-filters, .al-filters { display: contents; }
+
+@media (max-width: 768px) {
+
+  /* ── Shell ─────────────────────────────────────────────────────────── */
+  .app {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  .app-body { min-height: 0; }
+  .tab-content { scrollbar-width: none; }
+  .tab-content::-webkit-scrollbar { display: none; }
+
+  .sunsama-tab-transition,
+  .sunsama-tab-transition.yartu-tab-active {
+    max-width: none; padding: 16px 16px 28px; gap: 16px;
+  }
+  .sunsama-tab-transition.activity-tab-active,
+  .sunsama-tab-transition.notes-tab-active,
+  .sunsama-tab-transition.links-tab-active,
+  .sunsama-tab-transition.countdowns-tab-active,
+  .sunsama-tab-transition.reports-tab-active,
+  .sunsama-tab-transition.yartu-tab-active { padding-top: 0; }
+  /* Tasks + Habits are "contained scroll" on desktop (the page is locked, an inner
+     card scrolls). On a phone that squeezes the list into a few px, so they page-scroll. */
+  .sunsama-tab-transition.tasks-tab-active,
+  .sunsama-tab-transition.habits-tab-active {
+    flex: 1 0 auto; min-height: auto; overflow: visible; padding-bottom: 28px;
+  }
+
+  /* views that padded themselves on top of the shell */
+  .hv, .timer-tab, .cdp-page, .reports-view, .daily-view { padding-left: 0; padding-right: 0; }
+  .reports-view { padding-bottom: 8px; }
+  /* pinned bar: full-bleed against the shell's 16px gutter, like the Notes / Links / Activity bars, and kept
+     small (~125px, it was up to 200px): the view's title just repeats the switch above it so it's dropped,
+     the range buttons + export icons share one line, and the date caption sits under them. */
+  .ra-bar { margin-inline: -16px; width: calc(100% + 32px); padding: 10px 16px; gap: 8px; }
+  .ra-bar .ra-view-switch .ra-seg { width: 100%; }
+  .ra-bar .ra-view-switch .ra-seg button { flex: 1; }
+  .ra-bar .analytics-section-title, .ra-bar .da-title { display: none; }
+  .ra-bar .da-head { flex-direction: column-reverse; align-items: stretch; flex-wrap: nowrap; gap: 8px; }
+  .ra-bar .ra-range-ctl { gap: 6px; width: 100%; }
+  .ra-bar .ra-range-ctl .ra-seg { flex: 1 1 auto; min-width: 0; }
+  .ra-bar .ra-range-ctl .ra-seg button { flex: 1; padding: 6px 8px; white-space: nowrap; }
+  .ra-bar .ra-range-ctl .header-actions { gap: 6px !important; flex-shrink: 0; }
+  .ra-bar .ra-range-ctl .ra-custom { order: 3; flex: 1 0 100%; justify-content: space-between; }
+  .ra-bar .ra-period-head { gap: 0; }
+
+  /* ── Bottom tab bar ────────────────────────────────────────────────── */
+  .mobile-bottom-nav {
+    gap: 2px; align-items: stretch;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border);
+  }
+  .mobile-bottom-nav .main-nav-btn,
+  .mobile-bottom-nav .main-nav-btn.nav-active {
+    position: relative; flex: 1 1 0; min-width: 0; min-height: 54px;
+    flex-direction: column; justify-content: center; align-items: center; gap: 3px;
+    padding: 4px 0 2px; margin: 0; width: auto;
+    background: none !important; border: 0 !important; border-radius: 12px !important;
+    box-shadow: none !important; transform: none !important;
+    color: var(--text-muted) !important;
+    font-size: 0.68rem; font-weight: 600 !important; letter-spacing: 0; text-align: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-bottom-nav .main-nav-btn.nav-active { color: var(--accent) !important; }
+  .mobile-bottom-nav .main-nav-btn .nav-icon {
+    width: 52px; height: 30px; border-radius: 15px; opacity: 1;
+    transform: none !important; filter: none !important;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .mobile-bottom-nav .main-nav-btn .nav-icon svg { width: 22px; height: 22px; }
+  .mobile-bottom-nav .main-nav-btn.nav-active .nav-icon {
+    background: var(--accent-glow); color: var(--accent) !important;
+  }
+  .mobile-bottom-nav .nav-label { display: block; font-size: 0.68rem; line-height: 1; }
+  .mobile-bottom-nav .nav-badge {
+    top: 2px; left: calc(50% + 6px); right: auto; transform: none;
+    min-width: 16px; height: 16px;
+  }
+
+  /* ── "More" sheet ──────────────────────────────────────────────────── */
+  .mobile-more-overlay { background: rgba(0,0,0,0.55); }
+  .mobile-more-drawer {
+    padding: 10px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    max-height: 88dvh; overflow-y: auto; gap: 14px; border-radius: 24px 24px 0 0;
+  }
+  .mobile-more-drawer::before {
+    content: ''; display: block; width: 40px; height: 4px; border-radius: 2px;
+    background: var(--border-strong); align-self: center; flex-shrink: 0;
+  }
+  .mobile-more-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .mobile-more-item {
+    gap: 8px; padding: 16px 6px 12px; border-radius: 16px;
+    background: var(--bg-input); border: 1px solid var(--border);
+  }
+  .mobile-more-label { font-size: 0.74rem; }
+
+  /* ── Tasks ─────────────────────────────────────────────────────────── */
+  .tasks-tab-active .tasks-tab,
+  .tasks-tab-active .task-list-panel { flex: 1 0 auto; min-height: auto; overflow: visible; }
+  .tasks-dashboard-grid {
+    display: flex; flex-direction: column; gap: 16px;
+    flex: 0 0 auto; overflow: visible; min-height: auto;
+  }
+  .tasks-dashboard-grid > .yartu-card { overflow: visible !important; flex: 0 0 auto; min-height: auto !important; }
+  .tasks-scroll-list { overflow: visible !important; flex: none !important; }
+  .tasks-toolbar { gap: 8px !important; padding: 10px 12px !important; }
+  .tasks-toolbar .task-search-wrap { flex: 1 1 100% !important; max-width: none !important; min-width: 0 !important; }
+  .tasks-toolbar .task-search-input { height: 40px !important; }
+  .tasks-tab .yartu-card { padding: 14px; }
+  /* one card, not three nested ones: the list and its group cards lose their own chrome */
+  .linear-task-list-container { background: none; border: 0; box-shadow: none; border-radius: 0; overflow: visible; }
+  .task-group-card { padding: 0 !important; border: 0 !important; background: none !important; margin-bottom: 6px !important; }
+  /* A task is two lines: title on top, then icons · category · due date. The desktop row
+     is a single 36px line with fixed 96px + 118px columns, which left the title 0px wide. */
+  .linear-task-row {
+    display: grid; height: auto; min-height: 60px; margin-bottom: 6px;
+    padding: 9px 2px 9px 0;
+    grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+    column-gap: 0; row-gap: 4px; align-items: center;
+  }
+  .linear-task-row > div:only-child { grid-column: 1 / -1; }   /* the "Delete this task?" confirm */
+  .linear-checkbox { grid-row: 1 / span 2; grid-column: 1; margin: 0 12px; width: 22px; height: 22px; position: relative; }
+  .linear-checkbox::after { content: ''; position: absolute; inset: -12px; }
+  .linear-task-title-container { grid-row: 1; grid-column: 2 / 5; }
+  .linear-task-title {
+    white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    font-size: 0.92rem; line-height: 1.3;
+  }
+  .linear-task-icons { grid-row: 2; grid-column: 2; margin-right: 8px; }
+  .linear-task-cat { grid-row: 2; grid-column: 3; width: auto; max-width: 120px; margin-right: 8px; }
+  .linear-task-due { grid-row: 2; grid-column: 4; width: auto; min-width: 0; }
+  .linear-task-actions { grid-row: 1 / span 2; grid-column: 5; gap: 0; }
+  .linear-action-btn { width: 34px; height: 34px; }
+
+  /* ── Habits ────────────────────────────────────────────────────────── */
+  .hv { overflow: visible; flex: 0 0 auto; padding-top: 0; padding-bottom: 8px; }
+  .hv::before { display: none; }
+  .hv-sections { overflow: visible; flex: none; }
+  .hv-filters {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin-inline: -16px; padding-inline: 16px;
+  }
+  .hv-filters::-webkit-scrollbar { display: none; }
+  .hv-pill { flex-shrink: 0; }
+
+  /* ── Activity Log ──────────────────────────────────────────────────── */
+  .al-view { padding: 0 0 24px; gap: 8px; }
+  .al-toolbar {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: 8px; align-items: center;
+    margin-inline: -16px; width: calc(100% + 32px); padding: 10px 16px;
+  }
+  .al-tb-search { grid-column: 1 / span 2; grid-row: 1; min-width: 0; height: 40px; }
+  .al-toolbar > .al-header-right { grid-column: 3; grid-row: 1; justify-self: end; }
+  /* the three filters are one scrolling chip row (at 360px they overflowed their grid columns) */
+  .al-filters {
+    display: flex; grid-column: 1 / -1; grid-row: 2; align-items: center; gap: 8px;
+    overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px;
+  }
+  .al-filters::-webkit-scrollbar { display: none; }
+  .al-filters > * { flex-shrink: 0; }
+  .al-dsel-btn, .al-date-btn { height: 40px; padding: 0 12px; }
+  .al-tb-div { display: none; }
+  .al-count-txt {
+    grid-column: 1 / -1; grid-row: 3; height: auto; min-width: 0; padding: 0;
+    border-left: 0; justify-content: flex-start; margin: 0;
+  }
+  /* each entry: description gets the full width; time + module drop to a second line */
+  .al-row {
+    display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 16px;
+    grid-template-areas: "dot desc mod caret" ". time time time";
+    column-gap: 10px; row-gap: 2px; padding: 10px 4px; align-items: center;
+  }
+  .al-dot { grid-area: dot; align-self: start; margin-top: 6px; }
+  .al-row-desc { grid-area: desc; }
+  .al-row-time { grid-area: time; width: auto; text-align: left; font-size: 0.72rem; }
+  .al-row-sep { display: none; }
+  .al-row-mod { grid-area: mod; }
+  .al-row-caret { grid-area: caret; }
+
+  /* ── Notes ─────────────────────────────────────────────────────────── */
+  /* pinned bar: search + New Note on one line, every filter in one scrolling chip row
+     (it used to be ~245px of pinned screen) */
+  .nv-bar {
+    margin-inline: -16px; width: calc(100% + 32px); padding: 10px 16px;
+  }
+  .nv-bar > div {
+    display: grid !important; grid-template-columns: minmax(0, 1fr) auto; gap: 8px !important;
+  }
+  .nv-bar > div > div:first-child { flex: none !important; min-width: 0 !important; max-width: none !important; }
+  .nv-bar input[type="search"] { height: 40px !important; }
+  .nv-bar .hv-new-btn { height: 40px; padding: 0 14px !important; }
+  .nv-filters {
+    display: flex; grid-column: 1 / -1; align-items: center; gap: 8px;
+    overflow-x: auto; scrollbar-width: none;
+    margin-inline: -16px; padding-inline: 16px;
+  }
+  .nv-filters::-webkit-scrollbar { display: none; }
+  .nv-filters > * { flex-shrink: 0; }
+  .nv-filters > [role="group"][aria-label="View mode"] { margin-left: 0 !important; }
+  .nv-filters > span { min-width: 0 !important; }
+  /* the notes list below the bar already sits inside the 16px shell gutter */
+  .nv-bar + div { padding: 14px 0 24px !important; }
+
+  /* ── Links ─────────────────────────────────────────────────────────── */
+  .lk-bar { margin-inline: -16px; width: calc(100% + 32px); padding: 10px 16px; }
+  .links-toolbar { gap: 8px !important; }
+  .links-toolbar .links-search { flex: 1 1 150px !important; width: auto !important; min-width: 150px !important; max-width: none !important; }
+  .links-toolbar input[type="search"] { height: 40px !important; }
+  .links-toolbar > span { display: none; }   /* "5 links · 3 categories": secondary, and it forced a third row */
+  .lk-bar + div { padding: 14px 0 24px !important; }
+
+  /* ── Countdowns ────────────────────────────────────────────────────── */
+  /* the pinned filter bar was four wrapped rows (~200px); now two scrolling chip rows */
+  .cdp-filterbar, .cdp-head .cdp-filterbar {
+    flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 16px;
+    margin-inline: -16px; width: calc(100% + 32px);
+  }
+  .cdp-filter-group { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .cdp-filter-group::-webkit-scrollbar { display: none; }
+  .cdp-filter-group > * { flex-shrink: 0; }
+  .cdp-filter-label { display: none; }
+  .cdp-filter-group .add-task-btn { order: -1; }
+  .cdp-filterbar, .cdp-head .cdp-filterbar { border-radius: 0; }
+  .cdp-stats { gap: 8px; }
+  .cdp-stat { padding: 10px 12px; gap: 10px; }
+  .cdp-stat-sub:not(.cdp-stat-sub-warn) { display: none; }   /* "All time", "In progress"… repeat the label */
+
+  /* ── Reports ───────────────────────────────────────────────────────── */
+  .ra-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .ra-kpi { padding: 14px; border-radius: 14px; }
+  .ra-kpi-val { font-size: 1.45rem; }
+
+  /* ── Calendar ──────────────────────────────────────────────────────── */
+  /* toolbar: title row, then [Month|Week|Day] + a "+" and an inbox button on one row
+     (the two buttons keep their label in the DOM at font-size 0, so they stay named) */
+  .calendar-view > header { padding: 10px 16px !important; gap: 8px !important; }
+  .calendar-view > header > div:last-child { flex-wrap: nowrap; }
+  .calendar-view > header > div:last-child > div:not([title]) { flex: 1; }
+  .calendar-view > header > div:last-child > div:not([title]) > button { flex: 1; }
+  .calendar-view > header > div:last-child > button {
+    font-size: 0 !important; gap: 6px !important; height: 40px; flex-shrink: 0; justify-content: center;
+  }
+  /* 1fr = minmax(auto, 1fr): one long event title widened its column (209px vs 74px). The
+     month/week/day grids set it inline, so match the inline value. */
+  .calendar-view [style*="repeat(7, 1fr)"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
+  .calendar-view > header > div:last-child > button:nth-last-child(2) { width: 44px; padding: 0 !important; }
+  .calendar-view > header > div:last-child > button:last-child { padding: 0 12px !important; }
+
+  /* ── Journal ───────────────────────────────────────────────────────── */
+  .jnx-write-panel { padding-right: 0; }
+  .journal-rich-editor.jnx-editor { min-height: 260px !important; }
+  .jnx-title { font-size: 1.7rem !important; }
+  .jnx-title-group { flex-direction: column; align-items: flex-start; gap: 0; }
+}

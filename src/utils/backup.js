@@ -21,6 +21,7 @@ const EXCLUDED_LOCAL_KEYS = new Set([
   'nook_pkce_verifier',   // transient OAuth PKCE verifier
   'nook_sync_queue',      // transient, device-local Google Tasks sync queue
   'nook_deleted_tasks',   // device-local sync tombstones
+  'nook_ai_api_key',      // the user's own Gemini API key (a credential; backups also go to Drive)
 ]);
 // Any key containing one of these fragments is also excluded (defensive: catches
 // token keys — e.g. Google Calendar — regardless of their exact name).

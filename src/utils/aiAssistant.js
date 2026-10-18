@@ -6,10 +6,12 @@
 import { buildAiContext } from './aiContext';
 
 export async function askAssistant(chatHistory, newQuestion) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('nook_ai_api_key');
+  // The user's own key, from Settings (per device, never synced). Deliberately NOT a VITE_ env var:
+  // Vite inlines those into the public bundle, shipping the key to every visitor.
+  const apiKey = localStorage.getItem('nook_ai_api_key');
   
   if (!apiKey) {
-    throw new Error('API key is missing. Please add your Gemini API key in the Settings tab, or set VITE_GEMINI_API_KEY in your .env.local file.');
+    throw new Error('API key is missing. Please add your Gemini API key in the Settings tab.');
   }
 
   // Build the system context
@@ -42,13 +44,13 @@ ${context}`;
     parts: [{ text: userText }]
   });
 
-  let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+  // The key goes in a header, not the query string, so it stays out of URLs, logs and referrers.
+  const headers = { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey };
+  let url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent';
 
   let response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       contents,
       generationConfig: {
@@ -62,10 +64,10 @@ ${context}`;
     const errorData = await response.json().catch(() => ({}));
     if (errorData.error?.message?.includes('not found') || errorData.error?.message?.includes('high demand') || errorData.error?.message?.includes('overloaded')) {
       // Fallback if 3.7 isn't found
-      url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
+      url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
       response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ contents, generationConfig: { temperature: 0.7, maxOutputTokens: 1024 } })
       });
       if (!response.ok) {

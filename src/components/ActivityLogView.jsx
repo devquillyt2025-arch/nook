@@ -250,6 +250,8 @@ export default memo(function ActivityLogView({ setActiveTab }) {
           {search && <button className="al-tb-clear" onClick={() => setSearch('')}>×</button>}
         </div>
 
+        {/* display:contents on desktop (same flat row); a scrolling chip row on phones, see .al-filters */}
+        <div className="al-filters">
         <DropSelect
           label="Module"
           value={moduleFilter}
@@ -286,6 +288,7 @@ export default memo(function ActivityLogView({ setActiveTab }) {
               onClose={() => setDateOpen(false)}
             />
           )}
+        </div>
         </div>
 
         <span className="al-count-txt">{filtered.length} entries found</span>

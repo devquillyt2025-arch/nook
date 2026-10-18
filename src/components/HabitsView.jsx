@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, memo, useRef } from 'react';
 import TimeInput from './TimeInput';
+import { askConfirm } from '../utils/confirmDialog';
 import {
   HABIT_CATS, ACCENT_COLORS, localDateStr,
   isScheduledToday, isScheduledOn, isCompletedToday, isCompletedOn,
@@ -418,7 +419,7 @@ function HabitDetailPanel({ habit, onClose, onEdit, onDelete, onToggle, today })
       </div>
 
       <div className="tdp-footer">
-        <button className="tdp-delete-btn" onClick={() => { if (confirm(`Delete "${habit.name}"?`)) onDelete(); }}>
+        <button className="tdp-delete-btn" onClick={async () => { if (await askConfirm({ title: 'Delete this habit?', message: `"${habit.name}" and its history will be deleted. This can't be undone.` })) onDelete(); }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="3 6 5 6 21 6"/>
             <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>

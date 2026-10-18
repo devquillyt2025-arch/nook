@@ -8,6 +8,7 @@ export default function Select({
   disabled = false,
   className = '',
   style = {},
+  menuFontSize = '0.95rem',   // size of the dropdown list's text; a compact trigger can ask for a matching list
   id
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -167,7 +168,7 @@ export default function Select({
                 onMouseEnter={() => setHighlightedIndex(index)}
                 style={{
                   padding: '10px 12px',
-                  fontSize: '0.95rem',
+                  fontSize: menuFontSize,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',

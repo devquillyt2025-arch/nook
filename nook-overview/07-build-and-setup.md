@@ -105,8 +105,9 @@ Google Tasks/Calendar sync, Web Push, scheduled Drive backups, and the Claude fe
 See [05-backend.md](05-backend.md) for schema and functions. Steps:
 
 1. Create a Supabase project. Apply **every** migration in `supabase/migrations/` in
-   order: `0001, 0003, 0004, 0006, 0007, 0008, 0009, 0010, 0011, 0012` (the gaps are
-   intentional). `0012` is the cross-device sync table; nothing syncs without it.
+   order: `0001, 0003, 0004, 0006, 0007, 0008, 0009, 0010, 0011, 0012, 0013` (the gaps are
+   intentional). `0012` is the cross-device sync table; nothing syncs without it. `0013`
+   enables manual reminders.
 2. Set client env in `.env.local`:
    ```
    VITE_SUPABASE_URL=...

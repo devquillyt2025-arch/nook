@@ -40,6 +40,7 @@ Numbers `0002` and `0005` were never used; the sequence has gaps, not missing fi
 | `0010_upsert_reminders.sql` | `upsert_reminders()` — backup-wins bulk restore of reminders |
 | `0011_restore_and_null_updatedat_guard.sql` | NULL-safe LWW guard for tasks/habits (and a repair of frozen rows); `restore_tasks()` / `restore_habits()` |
 | `0012_synced_items.sql` | `synced_items`, `upsert_synced_items()`, Realtime publication — the generic cross-device sync store |
+| `0013_custom_reminders.sql` | Widens `reminders.source_type` to allow `'custom'` (manual reminders made on the Reminders tab) |
 
 All tables have **Row-Level Security** enabled; policies scope every row to
 `auth.uid() = user_id`, so client reads never need an explicit `user_id` filter.
@@ -48,12 +49,13 @@ All tables have **Row-Level Security** enabled; policies scope every row to
 
 ### `reminders` — `0001_reminders.sql`
 When/where to fire a notification for a task or calendar event. **Not** a copy of
-the task.
+the task. The exception is a **manual** reminder (`source_type 'custom'`, added by
+`0013`): it has no owner, so the row *is* the reminder and `title` is its text.
 ```
 id, user_id,
-source_type text check in ('task','calendar'),
-source_id text,                     -- the localStorage task id or gcal event id
-title text,                         -- snapshot for the notification payload
+source_type text check in ('task','calendar','custom'),   -- 'custom' since 0013
+source_id text,                     -- localStorage task id, Nook calendar event id, or a genId() for 'custom'
+title text,                         -- snapshot for the notification payload ('custom': the reminder text itself)
 target_at timestamptz,              -- the due/start time
 reminder_at timestamptz,            -- when to fire
 reminder_offset_minutes int null,   -- non-null = computed as target_at - N min
@@ -145,7 +147,9 @@ header.
 > **Applying a migration is a manual step** (SQL editor, `supabase db push`, or the
 > Supabase MCP). Until `0012` is applied, cross-device sync pushes fail quietly and
 > Settings → Connections shows "Couldn't reach the server — N changes waiting"; the
-> app itself is unaffected.
+> app itself is unaffected. Until `0013` is applied, creating a manual reminder fails
+> with a check violation (`23514`); the Reminders tab's modal says the migration is
+> missing. Task and calendar reminders don't need it.
 
 ---
 
@@ -216,7 +220,7 @@ router never grows a second, less-audited entry point via chat.
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key. |
 | `VITE_GOOGLE_CLIENT_ID` | Public Google OAuth client id (Tasks/Calendar/Drive consent). |
 | `VITE_VAPID_PUBLIC_KEY` | Web Push public key. |
-| `VITE_GEMINI_API_KEY` | **Optional, and a known problem:** the hidden Gemini assistant reads it (falling back to `nook_ai_api_key` from Settings). Because it is `VITE_`-prefixed it is **shipped to every user** and the key is sent from the browser — which breaks the "no secret behind `VITE_`" rule. Prefer the Settings field (per-device, never synced) or move the call behind an edge function before enabling the assistant. |
+| ~~`VITE_GEMINI_API_KEY`~~ | **No longer read.** It was inlined into the public bundle (anyone could read the key). The hidden Gemini assistant now uses only the per-device key typed in Settings (`nook_ai_api_key`, never synced, never in a backup), sent in an `x-goog-api-key` header. If this var was ever set for a build you deployed, treat that key as exposed and rotate it. |
 
 > A `VITE_`-prefixed secret is shipped to every user. The Google **client secret**,
 > VAPID **private** key, cron secret, service role key and the Anthropic key are
@@ -231,6 +235,52 @@ router never grows a second, less-audited entry point via chat.
 `RESEND_FROM` (optional), `SITE_URL`.
 
 ---
+
+## Security posture
+
+What is enforced, where, and what is deliberately left open. Read this before adding an endpoint, a
+third-party script/font, or anything that turns stored text into HTML or a URL.
+
+**Stored data is untrusted.** Anything read back from `localStorage` can have arrived from another device
+(sync), a backup file, or the landing app — not only from this user's keyboard.
+
+| Risk | Where it is handled |
+|---|---|
+| Stored XSS through journal HTML | `utils/sanitizeHtml.js`: `sanitizeJournalHtml()` (DOMPurify + a tag allowlist; `style` limited to a few plain properties) before anything reaches `innerHTML`; `htmlToPlainText()` / `parseHtmlInert()` (DOMParser) wherever text is only *read*. **Never** `div.innerHTML = stored` — an `<img onerror>` fires even on a detached element, and the calendar re-reads every entry. Pasted HTML is sanitised too (`onPaste` in `JournalView`). Notes are plain text and rendered by React, so they are safe. |
+| `javascript:` / `data:` URLs | `utils/safeUrl.js`: `openSafeUrl()` / `safeHttpUrl()` — only http(s) is ever opened. The add-link form's `https://` prefix guards only what the form wrote, not what was synced or restored. |
+| A backup file planting secrets | `utils/importKeys.js`: import writes only `nook-`/`nook_` keys and never anything containing `token` / `pkce`, nor the sync queues or `nook_ai_api_key`. (The old allowlist missed `nook_gcal_tokens`, which would have pointed Calendar sync at someone else's Google account.) Export applies the same exclusions, so credentials also stay out of Drive backups. |
+| Secrets in the public bundle | No `VITE_` secret — see the env table above. `VITE_GEMINI_API_KEY` is no longer read at all; the assistant uses the per-device Settings key, sent in an `x-goog-api-key` header rather than the URL. |
+| Third-party script | None. `canvas-confetti` comes from npm (lazy `import()`); the old CDN `<script>` had no SRI and was unused. The service-worker registration is a same-origin file (`public/register-sw.js`), so no inline script exists. |
+| Clickjacking, MIME sniffing, referrer leaks | `vercel.json` headers: `X-Frame-Options`, CSP `frame-ancestors 'none'`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`. |
+| Injected script / exfiltration | `vercel.json` CSP: `script-src 'self'` (no inline, no eval), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and a `connect-src` limited to Supabase + the Google APIs the app calls. `style-src` keeps `'unsafe-inline'` (React inline styles); `img-src` allows `https:` (link favicons). |
+| Service worker | Ignores non-GET and **cross-origin** requests. A request made *by the worker* is checked against the worker's own `connect-src`, which blocks Google Fonts and favicons — and those blocks never reach the page's `securitypolicyviolation` event, so a clean console is not proof. Notification clicks only navigate same-origin. |
+| Database | RLS on every table; RPCs are `SECURITY INVOKER` with a pinned `search_path`, force `user_id := auth.uid()` and raise for an unauthenticated caller. `upsert_reminders`, `restore_*` and `upsert_synced_items` also revoke `anon` execute (`upsert_tasks` / `upsert_habits` keep the default grant and rely on that check — a revoke in a new migration would be tidier). Token functions are `service_role` only. |
+| Edge functions | JWT verified on all but `send-task-reminders` (cron secret, compared in constant time; an unset secret never matches). Reminder text and ids are bounded and URL-encoded; the email subject is plain text. The two Claude functions return a generic error, cap the body, and rate-limit per user **best-effort** (in-memory, per isolate — a bound on one client, not a global cap). |
+
+**Changing the CSP.** A new cross-origin endpoint (an API, a CDN, a font host) needs a matching entry in
+`vercel.json` or it will be blocked in production while working in `npm run dev`. To test: build, serve it
+with the same headers (`vite preview` + `preview.headers` read from `vercel.json`), drive every tab, and
+listen for `securitypolicyviolation`. Supabase and Google traffic needs a real project to exercise
+(a custom Supabase domain would need adding to `connect-src`).
+
+**Known and deliberate / still open**
+- **SSO hash handoff (`AuthGate`) accepts a session from any link** (`#sb_access_token=…`). A crafted link
+  can sign a victim into the *sender's* account (login CSRF), after which their data syncs to it. The
+  account-switch prompt only protects a browser that has already synced as someone else. Fix options:
+  confirm the email being signed in, or bind the handoff to the landing origin (needs the landing app).
+  `AuthGate` is a protected file — not changed.
+- Edge-function CORS is `*`. Calls are authenticated with a bearer token, not cookies, so this is not
+  exploitable on its own; restricting it to `SITE_URL` is defence in depth.
+- `chat-with-claude` / `parse-voice-command` are deployed although their UI is hidden — any signed-up
+  account can call them. The in-memory limit only slows a single client; a DB-backed counter (or not
+  deploying them until the UI ships) is the real fix.
+- Supabase Auth: leaked-password protection is off (dashboard toggle). `public.set_updated_at` has a
+  mutable `search_path` (migration 0001).
+- `synced_items.data` has no size cap; Google and Supabase tokens live in `localStorage`, as in any SPA
+  (so XSS prevention above is what protects them).
+- `npm audit` still reports Vite 5 / Vitest 3 / esbuild / tinypool — build and test tooling only, nothing
+  ships to browsers; clearing them means Vite 8 / Vitest 5 majors. The dev server should not be exposed
+  beyond localhost.
 
 ## SSO handoff from the `landing/` app
 
