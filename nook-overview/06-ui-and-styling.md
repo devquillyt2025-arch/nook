@@ -100,7 +100,7 @@ they ignore the app theme. So Nook has none: every dropdown, date and time field
 
 | Need | Use | Notes |
 |---|---|---|
-| Dropdown | `components/Select.jsx` | `options=[{value,label,color?}]`; `onChange` gets `{ target: { value } }` |
+| Dropdown | `components/Select.jsx` | `options=[{value,label,color?}]`; `onChange` gets `{ target: { value } }`; the list's text is `0.95rem` unless a compact trigger passes `menuFontSize` (the Countdowns filter bar uses `0.8rem` so the list matches its 0.8rem trigger) |
 | Date | `components/DateInput.jsx` | drop-in for `<input type="date">`: `value` `'YYYY-MM-DD'`, `min`/`max`, `required`; opens `CalendarDatePicker` |
 | Time | `components/TimeInput.jsx` | drop-in for `<input type="time">`: `value` `'HH:MM'`; opens the scroll-wheel `TimePicker`; optional times get a "Clear" |
 

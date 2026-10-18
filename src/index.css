@@ -4766,17 +4766,23 @@ select.modal-input {
 }
 .cdp-head .cdp-filterbar { padding: 0; }   /* the head owns the spacing; flush with the stat cards so the filters fit one row */
 .cdp-filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cdp-filter-label { font-size: 0.66rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
-.cdp-count-label { font-size: 0.76rem; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
+/* One type scale for the whole strip: every piece of text is 0.8rem (the labels used to be 0.66rem
+   uppercase, the priority options 0.72rem, the count 0.76rem, and the dropdown list 0.95rem), and the
+   three controls are 32px tall (they were 32 / 26 / 29). Hierarchy comes from colour + weight, not size:
+   labels and the count are muted / 500, the values and the actions are 600. */
+.cdp-filter-label { font-size: 0.8rem; font-weight: 500; color: var(--text-muted); white-space: nowrap; }
+.cdp-count-label { font-size: 0.8rem; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
 
-.cdp-segment { display: flex; align-items: center; gap: 2px; background: var(--bg-hover); border-radius: 999px; padding: 2px; }
+.cdp-segment { display: flex; align-items: center; gap: 2px; background: var(--bg-hover); border-radius: 999px; padding: 3px; height: 32px; box-sizing: border-box; }
 .cdp-segment-btn {
-  font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);
+  font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);
   background: transparent; border: none; border-radius: 999px;
-  padding: 4px 11px; cursor: pointer; font-family: inherit; transition: all var(--ease);
+  height: 100%; padding: 0 12px; display: inline-flex; align-items: center;
+  cursor: pointer; font-family: inherit; transition: all var(--ease);
 }
 .cdp-segment-btn:hover { color: var(--text-primary); }
-.cdp-segment-btn-active { font-weight: 700; }
+.cdp-segment-btn-active { font-weight: 600; }   /* same weight as inactive: a bolder label made the pill reflow when toggled */
+.cdp-filterbar .add-task-btn { height: 32px; padding: 0 14px; display: inline-flex; align-items: center; }
 
 /* ── Card grid — 2-3 per row responsive ── */
 .cdp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; align-items: start; }
